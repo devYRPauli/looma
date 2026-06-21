@@ -413,6 +413,12 @@ def cmd_benchmark(args) -> int:
     return 0
 
 
+def cmd_mcp(args) -> int:
+    from . import mcp
+    mcp.serve()
+    return 0
+
+
 def cmd_status(args) -> int:
     store = _open_store(args)
     c = store.counts()
@@ -532,6 +538,9 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--compare", action="store_true", help="compare heuristic vs local-LLM extractor")
     pb.add_argument("--retrieval", action="store_true", help="benchmark retrieval: FTS-only vs FTS+vectors")
     pb.set_defaults(func=cmd_benchmark)
+
+    sub.add_parser("mcp", parents=[common], help="run the MCP server (stdio) for external agents").set_defaults(
+        func=cmd_mcp)
 
     pst = sub.add_parser("status", parents=[common], help="store + current-project overview")
     pst.add_argument("--health", action="store_true", help="show graph health metrics")
