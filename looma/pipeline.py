@@ -94,7 +94,24 @@ def rebuild(store: Store) -> dict:
             totals[k] += totals_p[k]
     totals["extractor"] = extractor.name
     store.commit()
+    _populate_vectors(store)
     return totals
+
+
+def _populate_vectors(store: Store) -> None:
+    """Rebuild the semantic index when a vector store is active (else a no-op)."""
+    from .storage.vector_store import get_vector_store
+
+    vstore = get_vector_store(store.path)
+    if not getattr(vstore, "available", False):
+        return
+    vstore.reset()
+    wis = [(w["id"], " ".join(filter(None, [w.get("title"), w.get("summary"), w.get("aliases")])))
+           for w in store.conn.execute("SELECT id,title,summary,aliases FROM work_items")]
+    ents = [(e["id"], " ".join(filter(None, [e.get("title"), e.get("body")])))
+            for e in store.conn.execute("SELECT id,title,body FROM entities")]
+    vstore.add_many("workitem", wis)
+    vstore.add_many("entity", ents)
 
 
 def _make_sha_validator(store: Store, root):

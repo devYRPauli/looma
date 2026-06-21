@@ -17,13 +17,14 @@ def _now() -> str:
 
 
 class Store:
-    def __init__(self, conn):
+    def __init__(self, conn, path=":memory:"):
         self.conn = conn
+        self.path = str(path)
 
     @classmethod
     def open(cls, db_path) -> "Store":
         conn = db.connect(db_path)
-        return cls(conn)
+        return cls(conn, path=db_path)
 
     def migrate(self) -> None:
         db.migrate(self.conn)

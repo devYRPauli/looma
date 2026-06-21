@@ -9,11 +9,26 @@ from .. import config
 from .match import fts_query
 
 
-def ask(store, project_id: int, query: str, limit: int = 8) -> list[dict]:
+def ask(store, project_id: int, query: str, limit: int = 8, vstore=None) -> list[dict]:
     q = fts_query(query)
     results: list[dict] = []
+    seen_ent: set[int] = set()
+
+    # semantic hits first (when a vector store is active) - catches vocabulary mismatch
+    if vstore is not None and getattr(vstore, "available", False):
+        for ref_id, vscore in vstore.search("entity", query, limit=limit):
+            r = store.conn.execute(
+                """SELECT e.kind, e.title, e.confidence, w.title AS wi_title
+                   FROM entities e LEFT JOIN work_items w ON w.id=e.work_item_id
+                   WHERE e.id=? AND e.project_id=?""", (ref_id, project_id)).fetchone()
+            if r:
+                seen_ent.add(ref_id)
+                conf = r["confidence"] or 0.0
+                results.append({"type": "memory", "kind": r["kind"], "title": r["title"],
+                                "confidence": conf, "band": config.band(conf),
+                                "work_item": r["wi_title"], "_v": round(vscore, 3)})
     if not q:
-        return results
+        return results[:limit]
 
     # validated memories
     try:
@@ -28,6 +43,8 @@ def ask(store, project_id: int, query: str, limit: int = 8) -> list[dict]:
             (q, project_id, limit),
         ).fetchall()
         for r in rows:
+            if r["id"] in seen_ent:
+                continue
             conf = r["confidence"] or 0.0
             results.append({
                 "type": "memory", "kind": r["kind"], "title": r["title"],

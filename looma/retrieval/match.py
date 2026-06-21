@@ -29,17 +29,21 @@ def fts_query(text: str) -> str:
     return " OR ".join(f'"{t}"' for t in toks)
 
 
-def match_work_items(store, project_id: int, goal: str) -> list[dict]:
+def match_work_items(store, project_id: int, goal: str, vstore=None) -> list[dict]:
     """Return work items relevant to `goal`, best-first, with a 'relevance' field.
 
-    FTS5 first; lexical Jaccard fallback so a result set is still produced when
-    FTS has no hit (and as a tie-breaker).
+    Hybrid: FTS5 + lexical Jaccard fallback + (when available) semantic vectors, so a
+    result still surfaces on vocabulary mismatch (e.g. 'auth' -> 'OAuth login').
     """
     wis = {w["id"]: dict(w) for w in store.project_work_items(project_id)}
     if not wis:
         return []
 
     scores: dict[int, float] = {}
+    if vstore is not None and getattr(vstore, "available", False):
+        for ref_id, vscore in vstore.search("workitem", goal, limit=10):
+            if ref_id in wis:
+                scores[ref_id] = max(scores.get(ref_id, 0.0), vscore)
     q = fts_query(goal)
     if q:
         try:

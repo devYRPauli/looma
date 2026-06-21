@@ -22,6 +22,11 @@ def _open_store(args) -> Store:
     return Store.open(_db_path(args))
 
 
+def _vstore(args):
+    from .storage.vector_store import get_vector_store
+    return get_vector_store(_db_path(args))
+
+
 def _conf(conf) -> str:
     conf = conf or 0.0
     return f"conf {conf:.2f} ({config.band(conf)})"
@@ -215,7 +220,7 @@ def cmd_resume(args) -> int:
         store.close()
         return 1
     goal = " ".join(args.goal or [])
-    res = resume_mod.resume(store, proj, goal)
+    res = resume_mod.resume(store, proj, goal, vstore=_vstore(args))
     git = res.get("git", {})
 
     header = f"PROJECT: {proj['display_name']} ({proj['canonical_key']})"
@@ -269,7 +274,7 @@ def cmd_ask(args) -> int:
         store.close()
         return 1
     query = " ".join(args.query or [])
-    results = ask_mod.ask(store, proj["id"], query)
+    results = ask_mod.ask(store, proj["id"], query, vstore=_vstore(args))
     print(f"Q: {query}\n")
     if not results:
         print("  No matches in validated memory or work items.")
@@ -367,6 +372,10 @@ def cmd_correct(args) -> int:
 
 
 def cmd_benchmark(args) -> int:
+    if args.retrieval:
+        from .benchmark import retrieval
+        print(retrieval.compare())
+        return 0
     from .benchmark import harness
     if args.compare:
         print(harness.compare())
@@ -488,6 +497,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pb = sub.add_parser("benchmark", parents=[common], help="extraction precision/recall/F1 on golden fixtures")
     pb.add_argument("--compare", action="store_true", help="compare heuristic vs local-LLM extractor")
+    pb.add_argument("--retrieval", action="store_true", help="benchmark retrieval: FTS-only vs FTS+vectors")
     pb.set_defaults(func=cmd_benchmark)
 
     pst = sub.add_parser("status", parents=[common], help="store + current-project overview")

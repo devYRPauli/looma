@@ -56,7 +56,7 @@ def _bundle_for(store, project: dict, wi: dict) -> dict:
     }
 
 
-def resume(store, project: dict, goal: str = "") -> dict:
+def resume(store, project: dict, goal: str = "", vstore=None) -> dict:
     pid = project["id"]
     root = project.get("root_path")
     git_state = {
@@ -76,7 +76,7 @@ def resume(store, project: dict, goal: str = "") -> dict:
             "bundle": _bundle_for(store, project, chosen), "alternatives": [],
         }
 
-    matches = match_work_items(store, pid, goal)
+    matches = match_work_items(store, pid, goal, vstore=vstore)
     if not matches:
         return {
             "mode": COLD, "project": project, "git": git_state, "reason": "no_match",
