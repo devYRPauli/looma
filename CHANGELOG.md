@@ -9,6 +9,11 @@ versions.
 Focus: extraction quality, trust, and evaluation - not feature count.
 
 ### Added
+- **Auto-detected local LLM extraction.** `LOOMA_EXTRACTOR=auto` (now the default)
+  detects a reachable local model server and uses the LLM extractor, else falls back
+  to the stdlib heuristic - so the LLM is the best-supported path when available while
+  the zero-dependency default is preserved (local HTTP over stdlib urllib, no new dep).
+  `looma doctor` reports the model server; `ingest`/`reprocess` report which extractor ran.
 - **Evaluation system.** `looma benchmark` and `looma benchmark --compare` report
   precision/recall/F1 for extraction over a golden fixture set.
 - **Extractor interface** with `HeuristicExtractor` (default) and a fully-local

@@ -67,8 +67,10 @@ rather than assumed.
 
 ## Remaining opportunities (ranked by resume-quality impact)
 
-1. **Default to LLM when a local server is detected**, with a one-time `looma doctor`
-   hint; keep heuristic fallback. (Biggest quality lever, now proven by benchmark.)
+1. ~~Default to LLM when a local server is detected~~ **DONE.** `LOOMA_EXTRACTOR=auto`
+   (the default) auto-detects a local model server and uses it, else falls back to the
+   stdlib heuristic; `looma doctor` reports the server, and `ingest` reports which
+   extractor ran. Zero new dependencies (local HTTP over stdlib urllib).
 2. **Route WorkItem titles through the LLM** too (work kind-acc 0.60 -> 0.80 in the
    benchmark). Currently only candidate memories use the extractor.
 3. **Address the 158 unresolved RELATED items** surfaced by health on real data -

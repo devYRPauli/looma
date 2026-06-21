@@ -57,6 +57,17 @@ def _database(db_path: Path) -> tuple[str, str, str]:
     return ("Database", WARN, f"not created yet at {db_path} (run `looma init`)")
 
 
+def _model_server() -> tuple[str, str, str]:
+    from .extraction.extractor import detect_server, _local_url
+    ok, model = detect_server()
+    if ok:
+        return ("Local model server", OK,
+                f"{model} reachable - LLM extraction active (higher quality)")
+    return ("Local model server", WARN,
+            f"none at {_local_url()} - using stdlib heuristic extraction (fine). "
+            "For best extraction run e.g. `llama-server -m <model.gguf> --port 8080`.")
+
+
 def _git_repo() -> tuple[str, str, str]:
     root = gitutil.repo_root(os.getcwd())
     if root:
@@ -75,4 +86,5 @@ def run(db_path) -> list[tuple[str, str, str]]:
         _database(db_path),
         _claude_history(),
         _git_repo(),
+        _model_server(),
     ]

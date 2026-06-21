@@ -110,6 +110,9 @@ def cmd_ingest(args) -> int:
           f"{counts['messages']} messages")
     print(f"Built:    {built['work_items']} work items, {built['candidates']} candidate "
           f"memories, {built['promoted']} promoted to validated memory")
+    print(f"Extraction: {built.get('extractor', 'heuristic')}"
+          + ("  (local LLM detected)" if built.get('extractor') == 'llm'
+             else "  (set up a local model server for higher-quality extraction; see `looma doctor`)"))
     if args.verbose:
         print(f"\n[timing] ingest {t1 - t0:.1f}s · build {t2 - t1:.1f}s · total {t2 - t0:.1f}s")
     return 0
@@ -123,7 +126,8 @@ def cmd_reprocess(args) -> int:
     dt = time.perf_counter() - t0
     store.close()
     print(f"Rebuilt graph from raw events + ledger: {built['work_items']} work items, "
-          f"{built['candidates']} candidates, {built['promoted']} promoted")
+          f"{built['candidates']} candidates, {built['promoted']} promoted "
+          f"(extraction: {built.get('extractor', 'heuristic')})")
     if args.verbose:
         print(f"[timing] {dt:.1f}s")
     return 0

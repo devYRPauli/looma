@@ -10,6 +10,7 @@ duplication). LocalLLMExtractor talks to a fully-local model server (llama.cpp
 llama-server or Ollama) - no hosted API - and falls back to heuristic on any error.
 """
 
+import functools
 import json
 import os
 import urllib.request
@@ -174,8 +175,36 @@ class LocalLLMExtractor:
         return {"memories": mems, "work": {"label": label, "kind": kind}}
 
 
+@functools.lru_cache(maxsize=8)
+def detect_server(base_url: Optional[str] = None):
+    """Probe for a reachable local OpenAI-compatible model server.
+
+    Returns (ok: bool, model_name | None). Cached per process: a short-lived CLI
+    probes once. Pure stdlib (urllib) - no new dependency. Short timeout so the
+    zero-dependency default path stays fast when no server is running.
+    """
+    url = base_url or _local_url()
+    models = url.rsplit("/chat/completions", 1)[0].rstrip("/") + "/models"
+    try:
+        with urllib.request.urlopen(models, timeout=0.6) as r:
+            data = json.loads(r.read())
+        mid = (data.get("data") or [{}])[0].get("id")
+        return (True, (mid.split("/")[-1] if mid else "local"))
+    except Exception:
+        return (False, None)
+
+
 def get_extractor(name: Optional[str] = None):
-    name = (name or os.environ.get("LOOMA_EXTRACTOR", "heuristic")).lower()
+    """Select an extractor. Modes: auto (default) | heuristic | llm.
+
+    'auto' uses the local LLM when a model server is detected, else the heuristic -
+    so the LLM is the best-supported path when available, and the stdlib-only
+    heuristic remains the default when it is not.
+    """
+    name = (name or os.environ.get("LOOMA_EXTRACTOR", "auto")).lower()
+    if name == "heuristic":
+        return HeuristicExtractor()
     if name == "llm":
         return LocalLLMExtractor()
-    return HeuristicExtractor()
+    # auto
+    return LocalLLMExtractor() if detect_server()[0] else HeuristicExtractor()

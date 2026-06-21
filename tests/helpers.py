@@ -4,6 +4,10 @@ import json
 import os
 from pathlib import Path
 
+# Pin extraction to the deterministic stdlib heuristic for tests, regardless of
+# whether a local model server happens to be running (default mode is now 'auto').
+os.environ["LOOMA_EXTRACTOR"] = "heuristic"
+
 from looma.storage.sqlite_store import Store
 
 

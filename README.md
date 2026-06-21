@@ -75,6 +75,28 @@ Everything runs on your machine over SQLite + FTS5. Commits and file paths come
 from your repo (git is ground truth), never invented. Full design:
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+## Extraction: zero-dependency default, optional local LLM
+
+By default Looma extracts with a fast, deterministic, **standard-library** heuristic -
+no model, no dependency, no setup. That is the default and the always-available
+fallback.
+
+If you run a local OpenAI-compatible model server (e.g. llama.cpp `llama-server` or
+Ollama), Looma **auto-detects it and uses it** for much higher-quality extraction -
+on the golden benchmark the local LLM scores **F1 0.96 vs the heuristic's 0.69**
+(precision 1.00 vs 0.67). Nothing leaves your machine; it is a local HTTP call over
+stdlib `urllib`, so the zero-dependency promise holds.
+
+```bash
+# optional: start any local model server, then just use looma normally
+llama-server -m <qwen2.5-7b-instruct.gguf> --port 8080 -ngl 99
+looma doctor          # shows "Local model server ... reachable - LLM extraction active"
+looma ingest --once   # prints "Extraction: llm (local LLM detected)"
+```
+
+Control it explicitly with `LOOMA_EXTRACTOR=auto|heuristic|llm` (default `auto`) and
+`LOOMA_LLM_URL` / `LOOMA_LLM_MODEL`. Compare them yourself: `looma benchmark --compare`.
+
 ## Current Status
 
 **Alpha.**
@@ -89,8 +111,9 @@ from your repo (git is ground truth), never invented. Full design:
 - WorkItem-first resume bundles with explicit uncertainty handling
 - Local SQLite storage + FTS5 lexical retrieval
 - Evaluation: `looma benchmark [--compare]` (precision/recall/F1 on a golden set)
-- Optional fully-local LLM extractor (opt-in `LOOMA_EXTRACTOR=llm`; beats the
-  heuristic on the benchmark, F1 0.96 vs 0.69), heuristic stays the default fallback
+- Optional fully-local LLM extractor, **auto-detected** when a local model server is
+  running (F1 0.96 vs 0.69 on the benchmark); the stdlib heuristic stays the
+  zero-dependency default and fallback
 - Human corrections: `looma correct merge|split|rename|promote|reject|false-positive|undo`
   (ledgered, replayable, override automated inference)
 - Graph health: `looma status --health`
@@ -99,7 +122,6 @@ from your repo (git is ground truth), never invented. Full design:
 
 ### Planned (not yet built)
 
-- Default to the local LLM extractor when a model server is detected
 - Cross-agent support: Codex, Cursor, Gemini, Windsurf, OpenCode
 - MCP integration (inject resume bundles into any agent)
 - Timeline views (feature evolution over time)

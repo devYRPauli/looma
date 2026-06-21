@@ -86,11 +86,13 @@ def rebuild(store: Store) -> dict:
     store.conn.execute("DELETE FROM fts_entities")
     store.commit()
 
+    extractor = extractor_mod.get_extractor()  # chosen once per rebuild (auto-detects)
     totals = {"work_items": 0, "candidates": 0, "promoted": 0}
     for project in store.list_projects():
-        totals_p = _rebuild_project(store, project)
+        totals_p = _rebuild_project(store, project, extractor)
         for k in totals:
             totals[k] += totals_p[k]
+    totals["extractor"] = extractor.name
     store.commit()
     return totals
 
@@ -111,7 +113,7 @@ def _make_sha_validator(store: Store, root):
     return validate
 
 
-def _rebuild_project(store: Store, project: dict) -> dict:
+def _rebuild_project(store: Store, project: dict, extractor=None) -> dict:
     pid = project["id"]
     root = project["root_path"]
     sessions = store.project_sessions(pid)
@@ -198,7 +200,7 @@ def _rebuild_project(store: Store, project: dict) -> dict:
     # ---- candidate memories + cross-session merge ----
     # default heuristic; opt into the local-LLM extractor with LOOMA_EXTRACTOR=llm
     # (it falls back to heuristic per-session if no local model server is reachable).
-    _extractor = extractor_mod.get_extractor()
+    _extractor = extractor or extractor_mod.get_extractor()
     _use_extractor = _extractor.name != "heuristic"
     merged: dict[tuple, dict] = {}
     for s in sessions:
