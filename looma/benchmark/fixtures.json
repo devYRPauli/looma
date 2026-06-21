@@ -1,0 +1,86 @@
+[
+  {
+    "name": "oauth_login",
+    "messages": [
+      {"role": "user", "text": "Let's implement OAuth login for the app. We decided to use JWT instead of opaque tokens so verification stays stateless."},
+      {"role": "assistant", "text": "Got it. Let me look at the architecture of the auth module first and read the existing routes."},
+      {"role": "user", "text": "Also there's a bug: the OAuth callback drops the state param on the redirect, so CSRF protection is broken."},
+      {"role": "assistant", "text": "I'll fix that error now. Editing auth/oauth.py.", "tool_calls": [{"name": "Edit", "input": {"file_path": "auth/oauth.py"}}]},
+      {"role": "user", "text": "We still need to implement refresh-token rotation before we ship."},
+      {"role": "assistant", "text": "Here is the handler:\nconst token = jwt.sign(payload);\nif (err) { return res.status(500); }"}
+    ],
+    "gold": {
+      "decisions": ["use JWT instead of opaque tokens for stateless verification"],
+      "todos": ["implement refresh-token rotation before shipping"],
+      "bugs": ["OAuth callback drops the state param on redirect breaking CSRF"],
+      "architecture": [],
+      "work": {"keywords": ["oauth", "login"], "kind": "feature"}
+    }
+  },
+  {
+    "name": "redis_cache",
+    "messages": [
+      {"role": "user", "text": "Add a Redis session cache. Decision: use Redis instead of in-process memory so sessions survive restarts and scale horizontally."},
+      {"role": "assistant", "text": "Makes sense. Architecturally, cache entries should expire with a TTL matching the session lifetime to avoid stale auth."},
+      {"role": "user", "text": "Right. We need to add a metric for cache hit rate too."},
+      {"role": "assistant", "text": "Running the tests now.", "tool_calls": [{"name": "Bash", "input": {"command": "pytest tests/test_cache.py"}}]},
+      {"role": "assistant", "text": "Traceback (most recent call last):\n  File cache/redis.py line 12\nConnectionError: refused"}
+    ],
+    "gold": {
+      "decisions": ["use Redis instead of in-process memory for sessions"],
+      "todos": ["add a metric for cache hit rate"],
+      "bugs": [],
+      "architecture": ["cache entries expire with a TTL matching session lifetime"],
+      "work": {"keywords": ["redis", "cache", "session"], "kind": "feature"}
+    }
+  },
+  {
+    "name": "checkout_rounding",
+    "messages": [
+      {"role": "user", "text": "Fix the checkout total rounding bug: line items round individually so the displayed total is off by a cent sometimes."},
+      {"role": "assistant", "text": "I see the issue. Let me fix the error in totals.py by rounding once at the end.", "tool_calls": [{"name": "Edit", "input": {"file_path": "checkout/totals.py"}}]},
+      {"role": "assistant", "text": "console.log('total', total);\nexpect(total).toBe(42.00);"},
+      {"role": "user", "text": "We need to add a regression test for the half-cent case."}
+    ],
+    "gold": {
+      "decisions": [],
+      "todos": ["add a regression test for the half-cent case"],
+      "bugs": ["checkout total rounding off by a cent because line items round individually"],
+      "architecture": [],
+      "work": {"keywords": ["checkout", "rounding"], "kind": "bugfix"}
+    }
+  },
+  {
+    "name": "db_migration",
+    "messages": [
+      {"role": "user", "text": "We're migrating the users table to add a tenant_id column. We decided to do an online migration with a backfill job rather than locking the table."},
+      {"role": "assistant", "text": "Good call. The backfill should be idempotent so it can resume. Let me draft the migration."},
+      {"role": "assistant", "text": "ALTER TABLE users ADD COLUMN tenant_id BIGINT;\nUPDATE users SET tenant_id = 0;"},
+      {"role": "user", "text": "We still need to write the backfill worker and gate reads behind a feature flag."}
+    ],
+    "gold": {
+      "decisions": ["online migration with a backfill job instead of locking the table"],
+      "todos": ["write the backfill worker", "gate reads behind a feature flag"],
+      "bugs": [],
+      "architecture": ["backfill must be idempotent so it can resume"],
+      "work": {"keywords": ["migrat", "tenant"], "kind": "migration"}
+    }
+  },
+  {
+    "name": "memory_leak",
+    "messages": [
+      {"role": "user", "text": "Investigate the memory leak in the worker process; RSS grows unbounded under load."},
+      {"role": "assistant", "text": "Let me profile it. I'll look at the architecture of the job queue to understand object lifetimes."},
+      {"role": "assistant", "text": "  500 MB  EventEmitter listeners\n  npm run profile"},
+      {"role": "user", "text": "Found it - the bug is that we never remove event listeners after a job completes, so they accumulate."},
+      {"role": "assistant", "text": "We should also add a soak test to catch this kind of leak in CI."}
+    ],
+    "gold": {
+      "decisions": [],
+      "todos": ["add a soak test to catch leaks in CI"],
+      "bugs": ["event listeners are never removed after a job completes so they accumulate causing a memory leak"],
+      "architecture": [],
+      "work": {"keywords": ["memory", "leak", "investigat"], "kind": "investigation"}
+    }
+  }
+]

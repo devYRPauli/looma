@@ -276,6 +276,102 @@ def cmd_ask(args) -> int:
     return 0
 
 
+def cmd_correct(args) -> int:
+    from . import correction
+    store = _open_store(args)
+    proj = _pick_project(store, args)
+    if not proj:
+        store.close()
+        return 1
+    pid = proj["id"]
+    action = args.action
+    rest = args.args or []
+
+    def need_wi(tok):
+        wi = correction.resolve_workitem(store, pid, tok)
+        if not wi:
+            print(f"no work item '{tok}' in this project (see `looma work`)", file=sys.stderr)
+        return wi
+
+    rebuilt = True
+    if action == "merge":
+        if len(rest) != 2:
+            print("usage: looma correct merge <idA> <idB>", file=sys.stderr); store.close(); return 1
+        a, b = need_wi(rest[0]), need_wi(rest[1])
+        if not (a and b):
+            store.close(); return 1
+        sa = correction.workitem_sessions(store, pid, a["id"])
+        sb = correction.workitem_sessions(store, pid, b["id"])
+        lid = correction.correct(store, pid, "merge", {"a": sa, "b": sb})
+        print(f"merged #{a['id']} + #{b['id']} (correction #{lid})")
+    elif action == "split":
+        if len(rest) != 1:
+            print("usage: looma correct split <id> [--session <sid>]", file=sys.stderr); store.close(); return 1
+        wi = need_wi(rest[0])
+        if not wi:
+            store.close(); return 1
+        sess = store.work_item_sessions(pid, wi["id"])
+        ids = [s["id"] for s in sess]
+        if args.session:
+            if args.session not in ids:
+                print(f"session {args.session} is not in #{wi['id']}", file=sys.stderr); store.close(); return 1
+            a, b = [args.session], [i for i in ids if i != args.session]
+        else:  # split by branch
+            from collections import defaultdict
+            bybr = defaultdict(list)
+            for s in sess:
+                bybr[s.get("branch") or "?"].append(s["id"])
+            if len(bybr) < 2:
+                print("nothing to split (single branch); use --session <sid>", file=sys.stderr); store.close(); return 1
+            grps = list(bybr.values())
+            a, b = grps[0], [i for g in grps[1:] for i in g]
+        lid = correction.correct(store, pid, "split", {"a": a, "b": b})
+        print(f"split #{wi['id']} (correction #{lid})")
+    elif action == "rename":
+        if len(rest) < 2:
+            print("usage: looma correct rename <id> <new title>", file=sys.stderr); store.close(); return 1
+        wi = need_wi(rest[0])
+        if not wi:
+            store.close(); return 1
+        title = " ".join(rest[1:])
+        sa = correction.workitem_sessions(store, pid, wi["id"])
+        lid = correction.correct(store, pid, "rename", {"sessions": sa, "title": title})
+        print(f"renamed #{wi['id']} -> {title!r} (correction #{lid})")
+    elif action in ("promote", "reject", "false-positive"):
+        if not rest:
+            print(f"usage: looma correct {action} <text of the memory>", file=sys.stderr); store.close(); return 1
+        mem = correction.find_memory(store, pid, " ".join(rest))
+        if not mem:
+            print("no matching memory found", file=sys.stderr); store.close(); return 1
+        act = "false_positive" if action == "false-positive" else action
+        lid = correction.correct(store, pid, act, {"kind": mem[0], "title": mem[1]})
+        print(f"{action}: [{mem[0]}] {mem[1][:60]} (correction #{lid})")
+    elif action == "undo":
+        if len(rest) != 1 or not rest[0].isdigit():
+            print("usage: looma correct undo <correction_id>", file=sys.stderr); store.close(); return 1
+        if correction.undo(store, int(rest[0])) is None:
+            print(f"no correction #{rest[0]}", file=sys.stderr); store.close(); return 1
+        print(f"undid correction #{rest[0]}")
+    elif action == "log":
+        rebuilt = False
+        for e in correction.ledger_entries(store, pid):
+            print(f"  #{e['id']} {e['action_type']:14} {e['ts'][:19]}  {e.get('rationale') or ''}")
+    if rebuilt:
+        pipeline.rebuild(store)
+    store.close()
+    return 0
+
+
+def cmd_benchmark(args) -> int:
+    from .benchmark import harness
+    if args.compare:
+        print(harness.compare())
+    else:
+        from .extraction.extractor import HeuristicExtractor
+        print(harness.format_one(harness.run(HeuristicExtractor())))
+    return 0
+
+
 def cmd_status(args) -> int:
     store = _open_store(args)
     c = store.counts()
@@ -288,6 +384,10 @@ def cmd_status(args) -> int:
     print(f"  memories:   {c['candidates']} candidate "
           f"({c['promoted']} promoted -> {c['entities']} validated)")
     print(f"  commits:    {c['commits']}")
+    if getattr(args, "health", False):
+        from . import health
+        print()
+        print(health.format_health(health.compute(store)))
     if c["sessions"] == 0:
         print("\n  Nothing ingested yet. Run `looma ingest --once`.")
     cur = _resolve_current_project(store)
@@ -375,8 +475,20 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--project", help="project canonical key (default: current dir)")
     pa.set_defaults(func=cmd_ask)
 
-    sub.add_parser("status", parents=[common], help="store + current-project overview").set_defaults(
-        func=cmd_status)
+    pc = sub.add_parser("correct", parents=[common], help="human corrections (merge/split/rename/promote/reject/false-positive/undo/log)")
+    pc.add_argument("action", choices=["merge", "split", "rename", "promote", "reject", "false-positive", "undo", "log"])
+    pc.add_argument("args", nargs="*")
+    pc.add_argument("--session", type=int, help="session id to peel off (split)")
+    pc.add_argument("--project", help="project canonical key (default: current dir)")
+    pc.set_defaults(func=cmd_correct)
+
+    pb = sub.add_parser("benchmark", parents=[common], help="extraction precision/recall/F1 on golden fixtures")
+    pb.add_argument("--compare", action="store_true", help="compare heuristic vs local-LLM extractor")
+    pb.set_defaults(func=cmd_benchmark)
+
+    pst = sub.add_parser("status", parents=[common], help="store + current-project overview")
+    pst.add_argument("--health", action="store_true", help="show graph health metrics")
+    pst.set_defaults(func=cmd_status)
     sub.add_parser("doctor", parents=[common], help="diagnose the local environment").set_defaults(
         func=cmd_doctor)
 

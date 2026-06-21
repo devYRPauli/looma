@@ -88,17 +88,21 @@ from your repo (git is ground truth), never invented. Full design:
 - Git-anchored context reconstruction (validated commits, branches, files)
 - WorkItem-first resume bundles with explicit uncertainty handling
 - Local SQLite storage + FTS5 lexical retrieval
-- CLI: `init`, `ingest`, `work`, `resume`, `ask`, `status`, `doctor`, `reset`
+- Evaluation: `looma benchmark [--compare]` (precision/recall/F1 on a golden set)
+- Optional fully-local LLM extractor (opt-in `LOOMA_EXTRACTOR=llm`; beats the
+  heuristic on the benchmark, F1 0.96 vs 0.69), heuristic stays the default fallback
+- Human corrections: `looma correct merge|split|rename|promote|reject|false-positive|undo`
+  (ledgered, replayable, override automated inference)
+- Graph health: `looma status --health`
+- CLI: `init`, `ingest`, `work`, `resume`, `ask`, `status`, `doctor`, `reset`,
+  `benchmark`, `correct`, `reprocess`
 
 ### Planned (not yet built)
 
-- Local LLM extraction engine (replaces heuristic title/memory extraction)
-- Benchmark framework
+- Default to the local LLM extractor when a model server is detected
 - Cross-agent support: Codex, Cursor, Gemini, Windsurf, OpenCode
 - MCP integration (inject resume bundles into any agent)
 - Timeline views (feature evolution over time)
-- Human correction workflows (merge / split / rename / promote / reject)
-- Graph health metrics
 - Semantic retrieval (sqlite-vec behind the existing VectorStore interface)
 - Local UI
 

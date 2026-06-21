@@ -9,11 +9,12 @@ Two phases keep the system idempotent (ARCHITECTURE.md 14):
 
 import json
 
-from . import confidence, gitutil, identity
+from . import confidence, correction, gitutil, identity
 from .adapters.claude import ClaudeAdapter
 from .config import claude_projects_dir
 from .extraction import candidates as cand_mod
 from .extraction import deterministic
+from .extraction import extractor as extractor_mod
 from .promotion import promote
 from .resolution import workitems as wi_mod
 from .storage.sqlite_store import Store
@@ -129,6 +130,11 @@ def _rebuild_project(store: Store, project: dict) -> dict:
 
     builders = wi_mod.resolve(signals)
 
+    # ---- apply human corrections (override automated inference; ARCHITECTURE.md 13) ----
+    corr = correction.load(store, pid)
+    sess_files = {sid: set(a["files"]) for sid, a in session_artifacts.items()}
+    builders = correction.apply_to_builders(builders, corr, sess_files)
+
     # ---- persist WorkItems + membership graph ----
     session_to_wi = {}
     wi_ids = []
@@ -151,8 +157,8 @@ def _rebuild_project(store: Store, project: dict) -> dict:
             aliases=list(b["aliases"]), files=sorted(b["files"]),
             confidence=conf, first_seen=b["started_at"], last_active=b["ended_at"],
         )
-        conf = confidence.apply_ledger_override(store, "workitem", wi_id, conf)
-        store.update_work_item(wi_id, confidence=conf)
+        if b.get("name_locked"):
+            store.update_work_item(wi_id, name_locked=1)
         store.index_work_item_fts(store.get_work_item(wi_id))
         wi_ids.append(wi_id)
         wi_node = store.node_id(pid, "workitem", wi_id)
@@ -189,12 +195,22 @@ def _rebuild_project(store: Store, project: dict) -> dict:
         for s in sessions:
             store.upsert_branch(pid, s.get("branch"), s.get("head_sha"))
 
-    # ---- candidate memories (heuristic) + cross-session merge ----
+    # ---- candidate memories + cross-session merge ----
+    # default heuristic; opt into the local-LLM extractor with LOOMA_EXTRACTOR=llm
+    # (it falls back to heuristic per-session if no local model server is reachable).
+    _extractor = extractor_mod.get_extractor()
+    _use_extractor = _extractor.name != "heuristic"
     merged: dict[tuple, dict] = {}
     for s in sessions:
         wi_id = session_to_wi.get(s["id"])
         model = s.get("agent_model")
-        for c in cand_mod.extract_candidates(session_msgs[s["id"]]):
+        if _use_extractor:
+            cands = [{"kind": mm["kind"], "title": mm["title"], "body": mm["title"],
+                      "ts": None, "message_id": None}
+                     for mm in _extractor.extract(session_msgs[s["id"]]).get("memories", [])]
+        else:
+            cands = cand_mod.extract_candidates(session_msgs[s["id"]])
+        for c in cands:
             key = (c["kind"], c["title"].lower())
             if key in merged:
                 m = merged[key]
@@ -224,6 +240,14 @@ def _rebuild_project(store: Store, project: dict) -> dict:
             n_agents=len(m["agent_refs"]),
             span_days=_span(m["first_seen"], m["last_seen"]),
         )
+        # human-correction override on this memory (ARCHITECTURE.md 13.2)
+        override = corr.mem.get((m["kind"], correction.norm(m["title"])))
+        force_p = override == "promote"
+        force_r = override == "reject"
+        if force_p:
+            cand_conf = 1.0
+        elif force_r:
+            cand_conf = 0.0
         cid = store.insert_candidate(
             pid, kind=m["kind"], title=m["title"], body=m["body"],
             status="open", session_refs=list(m["session_refs"]),
@@ -231,14 +255,8 @@ def _rebuild_project(store: Store, project: dict) -> dict:
             last_seen=m["last_seen"], confidence=cand_conf,
             work_item_id=m["work_item_id"],
         )
-        cand_conf = confidence.apply_ledger_override(store, "candidate", cid, cand_conf)
-        store.update_candidate(cid, confidence=cand_conf)
         n_candidates += 1
 
-        force_p = bool(store.constraint_for("FORCE_PROMOTE", "candidate", cid))
-        force_r = bool(store.constraint_for("FORCE_REJECT", "candidate", cid)) or bool(
-            store.constraint_for("FALSE_POSITIVE", "candidate", cid)
-        )
         if promote.should_promote(
             commit_linked=wi_commits,
             work_item_active=bool(wi and wi["lifecycle"] == "active"),

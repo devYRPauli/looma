@@ -4,6 +4,30 @@ All notable changes to Looma are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses pre-1.0 alpha
 versions.
 
+## [Unreleased]
+
+Focus: extraction quality, trust, and evaluation - not feature count.
+
+### Added
+- **Evaluation system.** `looma benchmark` and `looma benchmark --compare` report
+  precision/recall/F1 for extraction over a golden fixture set.
+- **Extractor interface** with `HeuristicExtractor` (default) and a fully-local
+  `LocalLLMExtractor` (llama.cpp/Ollama, no hosted API), opt-in via `LOOMA_EXTRACTOR=llm`,
+  with per-session fallback to the heuristic.
+- **Human Correction Layer:** `looma correct merge|split|rename|promote|reject|
+  false-positive|undo|log`. Corrections are ledgered, replayable, override automated
+  inference, and survive deterministic rebuilds (anchored to stable keys).
+- **Graph health metrics:** `looma status --health` (conversion rate, merge rate,
+  false-positive rate, avg work item size, orphan candidates, unresolved related items).
+
+### Benchmark
+- Local LLM extractor (Qwen2.5-7B Q3_K_M) beats the heuristic on the golden set:
+  **F1 0.96 vs 0.69** (precision 1.00 vs 0.67), so it is kept as an opt-in upgrade.
+
+### Tests
+- 53 tests (was 44): benchmark scoring, corrections (merge/rename/reject/undo with
+  replay), health metrics.
+
 ## [0.1.0-alpha.1] - 2026-06-21
 
 First public alpha.
