@@ -415,6 +415,12 @@ def cmd_benchmark(args) -> int:
     return 0
 
 
+def cmd_daemon(args) -> int:
+    from . import daemon
+    daemon.run(_db_path(args), interval=args.interval, once=args.once, verbose=args.verbose)
+    return 0
+
+
 def cmd_mcp(args) -> int:
     from . import mcp
     mcp.serve()
@@ -543,6 +549,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("mcp", parents=[common], help="run the MCP server (stdio) for external agents").set_defaults(
         func=cmd_mcp)
+
+    pdm = sub.add_parser("daemon", parents=[common], help="watch transcripts and stay current automatically")
+    pdm.add_argument("--interval", type=int, default=60, help="poll interval seconds (default 60)")
+    pdm.add_argument("--once", action="store_true", help="run a single cycle and exit")
+    pdm.set_defaults(func=cmd_daemon)
 
     pst = sub.add_parser("status", parents=[common], help="store + current-project overview")
     pst.add_argument("--health", action="store_true", help="show graph health metrics")
