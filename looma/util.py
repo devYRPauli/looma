@@ -5,6 +5,23 @@ from datetime import datetime
 from typing import Iterable, Optional
 
 _WORD = re.compile(r"[a-z0-9]+")
+
+# Map the common non-ASCII characters that leak in from transcript prose to ASCII
+# so CLI output stays plain-text and copy-pasteable in any terminal.
+_ASCII_MAP = {
+    "‘": "'", "’": "'", "“": '"', "”": '"',
+    "–": "-", "—": "-", "…": "...", " ": " ",
+    "→": "->", "•": "-", "·": "-",
+}
+_ASCII_RE = re.compile("|".join(re.escape(k) for k in _ASCII_MAP))
+
+
+def to_ascii(text: str) -> str:
+    """Best-effort fold of smart quotes / dashes / arrows to ASCII; drop the rest."""
+    if not text:
+        return text
+    t = _ASCII_RE.sub(lambda m: _ASCII_MAP[m.group(0)], text)
+    return t.encode("ascii", "ignore").decode("ascii")
 _ACRONYMS = {
     "oauth": "OAuth", "api": "API", "jwt": "JWT", "ui": "UI", "cli": "CLI",
     "http": "HTTP", "https": "HTTPS", "sql": "SQL", "db": "DB", "id": "ID",

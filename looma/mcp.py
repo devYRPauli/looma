@@ -1,7 +1,7 @@
 """Minimal MCP server (goal Phase 4) - lets any MCP agent consume Looma context.
 
 Pure stdlib: JSON-RPC 2.0 over newline-delimited stdio. No dependency, no network,
-no hosted service - fully local. Tools: resume_work, ask, timeline, list_work, recall.
+no hosted service - fully local. Tools: resume_work, brief, ask, timeline, list_work, recall.
 Run via `looma mcp` (typically launched by the agent inside the project directory).
 """
 
@@ -26,6 +26,9 @@ TOOLS = [
      "description": "Reconstruct the active work for a goal: WorkItem, decisions, blockers, bugs, commits, files, next step.",
      "inputSchema": {"type": "object", "properties": {**_OPT_PROJECT,
                      "goal": {"type": "string", "description": "what to resume, e.g. 'auth'"}}}},
+    {"name": "brief",
+     "description": "60-second project orientation: summary, active work, recent decisions, risks, blockers, recent commits, suggested next work.",
+     "inputSchema": {"type": "object", "properties": {**_OPT_PROJECT}}},
     {"name": "ask",
      "description": "Search validated project memory and work items.",
      "inputSchema": {"type": "object", "properties": {**_OPT_PROJECT,
@@ -66,6 +69,13 @@ class _Server:
             return self._no_project(a)
         res = resume_mod.resume(self.store, proj, a.get("goal", ""), vstore=self.vstore)
         return _fmt_resume(res, proj)
+
+    def brief(self, a):
+        from . import brief as brief_mod
+        proj = self._project(a)
+        if not proj:
+            return self._no_project(a)
+        return brief_mod.format_brief(brief_mod.build(self.store, proj, vstore=self.vstore))
 
     def ask(self, a):
         proj = self._project(a)

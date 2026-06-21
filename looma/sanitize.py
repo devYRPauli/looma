@@ -57,11 +57,12 @@ def is_noise(text: str) -> bool:
 # code / diff / log fragments that must never surface as a title, memory, or
 # next step. Shared by retrieval (display-time filtering) and extraction.
 _CODE_FRAGMENT = re.compile(
-    r"(^\s*[+\-]\s)|[{}]|=>|;\s*$|`|</|/>|::|==|!=|\)\s*\{|<[A-Za-z][\w-]*[\s/>]|className=|"
+    r"(^\s*[+\-]\s)|(^\s*\+)|//|[{}]|=>|;\s*$|`|</|/>|::|==|!=|\)\s*\{|<[A-Za-z][\w-]*[\s/>]|className=|"
     r"\b(?:const|let|await|function|return|def|import|class|console|throw new)\b|"
     r"Date\.now|\b\w+\([^)]*\)\s*[:{]"
 )
 _ALPHA_RUN = re.compile(r"[A-Za-z]{3,}")
+_FILE_EXT = re.compile(r"\.[A-Za-z0-9]{1,5}$")
 
 
 def looks_like_code(text: str) -> bool:
@@ -75,5 +76,9 @@ def looks_like_code(text: str) -> bool:
         return True
     if _CODE_FRAGMENT.search(t):
         return True
-    # too few real words to be a sentence (e.g. "x.set_defaults", "cp037/gbk")
+    # a bare file path / dotted identifier with no spaces is not prose
+    # (e.g. "src/tests/foo-bar.test.ts", "looma/cli.py", "x.set_defaults")
+    if " " not in t and ("/" in t or _FILE_EXT.search(t)):
+        return True
+    # too few real words to be a sentence (e.g. "cp037/gbk")
     return len(_ALPHA_RUN.findall(t)) < 2

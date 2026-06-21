@@ -269,6 +269,19 @@ def cmd_resume(args) -> int:
     return 0
 
 
+def cmd_brief(args) -> int:
+    from . import brief as brief_mod
+    store = _open_store(args)
+    proj = _pick_project(store, args)
+    if not proj:
+        store.close()
+        return 1
+    b = brief_mod.build(store, proj, vstore=_vstore(args))
+    print(brief_mod.format_brief(b))
+    store.close()
+    return 0
+
+
 def cmd_timeline(args) -> int:
     from . import timeline as tl
     from .correction import resolve_workitem
@@ -524,6 +537,10 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("goal", nargs="*", help="optional goal, e.g. auth")
     pr.add_argument("--project", help="project canonical key (default: current dir)")
     pr.set_defaults(func=cmd_resume)
+
+    pbr = sub.add_parser("brief", parents=[common], help="60-second project orientation")
+    pbr.add_argument("--project", help="project canonical key (default: current dir)")
+    pbr.set_defaults(func=cmd_brief)
 
     ptl = sub.add_parser("timeline", parents=[common], help="show a work item's evolution over time")
     ptl.add_argument("work", nargs="*", help="work item id (#5) or goal text")
