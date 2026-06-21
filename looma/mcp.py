@@ -15,6 +15,7 @@ from .retrieval import resume as resume_mod
 from .retrieval.match import match_work_items
 from .storage.sqlite_store import Store
 from .storage.vector_store import get_vector_store
+from .util import to_ascii
 
 PROTOCOL = "2024-11-05"
 
@@ -199,7 +200,9 @@ class _Server:
             except Exception as e:
                 return _ok(mid, {"content": [{"type": "text", "text": f"error: {e}"}],
                                  "isError": True})
-            return _ok(mid, {"content": [{"type": "text", "text": text}], "isError": False})
+            # fold to ASCII centrally so transcript emoji/smart-quotes never leak
+            # into another agent's context (ask/recall/list_work build raw strings)
+            return _ok(mid, {"content": [{"type": "text", "text": to_ascii(text)}], "isError": False})
         return _err(mid, -32601, f"unknown method {method}")
 
 
