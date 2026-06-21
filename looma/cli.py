@@ -19,7 +19,12 @@ def _db_path(args) -> Path:
 
 
 def _open_store(args) -> Store:
-    return Store.open(_db_path(args))
+    # Always migrate: a fresh DB (user ran a command before `looma init`) must
+    # work, not crash with "no such table". migrate() is idempotent and cheap, so
+    # `init` becomes optional - one less step before the first answer.
+    store = Store.open(_db_path(args))
+    store.migrate()
+    return store
 
 
 def _vstore(args):
@@ -91,6 +96,12 @@ def cmd_ingest(args) -> int:
 
     store = _open_store(args)
     store.migrate()
+
+    first_run = store.conn.execute("SELECT 1 FROM sessions LIMIT 1").fetchone() is None
+    if first_run and not args.limit:
+        n = len(list(claude_dir.glob("*/*.jsonl")))
+        print(f"Indexing {n} transcript files (first run can take a minute; "
+              f"try `--limit 25` for an instant taste)...", flush=True)
 
     t0 = time.perf_counter()
     ing = pipeline.ingest_messages(
@@ -536,6 +547,15 @@ def cmd_doctor(args) -> int:
         print(f"  {sym[status]}  {name:18} {detail}")
         if status == doctor.FAIL:
             worst_ok = False
+    # concrete next step, so doctor ends with an action not just a status
+    store = _open_store(args)
+    has_data = store.conn.execute("SELECT 1 FROM sessions LIMIT 1").fetchone() is not None
+    store.close()
+    print()
+    if has_data:
+        print("Next: `looma` for your daily view, or `looma resume \"<goal>\"`.")
+    else:
+        print("Next: `looma ingest` to index your history, then `looma`.")
     print(f"\n{PRIVACY}")
     if not worst_ok:
         print("\nOne or more checks FAILED - looma may not run correctly.", file=sys.stderr)

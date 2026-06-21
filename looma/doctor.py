@@ -54,7 +54,7 @@ def _database(db_path: Path) -> tuple[str, str, str]:
     if db_path.exists():
         size = db_path.stat().st_size
         return ("Database", OK, f"{db_path} ({size // 1024} KB)")
-    return ("Database", WARN, f"not created yet at {db_path} (run `looma init`)")
+    return ("Database", WARN, f"not created yet at {db_path} (auto-created on first `looma ingest`)")
 
 
 def _model_server() -> tuple[str, str, str]:

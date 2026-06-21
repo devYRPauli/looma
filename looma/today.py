@@ -122,7 +122,9 @@ def format_today(t: dict) -> str:
     if t["project"] is None:
         L.append(f"LOOMA TODAY - repos touched in the last {t['days']} days")
         if not t["elsewhere"]:
-            L.append("  (nothing recent - run `looma ingest --once`)")
+            L.append("  Nothing indexed yet. Get started:")
+            L.append("    looma ingest            # index your coding-agent history")
+            L.append("    looma                   # then this view fills in")
         for e in t["elsewhere"]:
             p = e["project"]
             L.append(f"\n  {p['display_name']}  ({(e['last_active'] or '')[:10]}, {e['sessions']} sessions)")
