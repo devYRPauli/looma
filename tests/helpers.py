@@ -47,3 +47,19 @@ def assistant_edit_rec(uuid, session_id, cwd, branch, file_path, ts="2026-06-18T
             "content": [{"type": "tool_use", "name": "Edit", "input": {"file_path": file_path}}],
         },
     }
+
+
+def write_codex_session(codex_root, session_id, cwd, texts, ts="2026-06-18T10:00:00Z"):
+    """texts: list of (role, text). Writes a Codex rollout-*.jsonl under codex_root/sessions."""
+    d = codex_root / "sessions" / "2026" / "06" / "18"
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"rollout-2026-06-18T10-00-00-{session_id}.jsonl"
+    with open(path, "w") as fh:
+        fh.write(json.dumps({"type": "session_meta", "timestamp": ts,
+                             "payload": {"id": session_id, "cwd": cwd}}) + "\n")
+        for role, text in texts:
+            block = "input_text" if role == "user" else "output_text"
+            fh.write(json.dumps({"type": "response_item", "timestamp": ts,
+                                 "payload": {"type": "message", "role": role,
+                                             "content": [{"type": block, "text": text}]}}) + "\n")
+    return path

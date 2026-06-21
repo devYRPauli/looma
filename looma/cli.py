@@ -109,7 +109,9 @@ def cmd_ingest(args) -> int:
         else:
             print("No Claude sessions found to ingest.")
         return 0
-    print(f"Ingested {ing['sessions']} sessions, {ing['new_messages']} new messages"
+    by_src = ing.get("per_source") or {}
+    src_str = ", ".join(f"{k}:{v}" for k, v in sorted(by_src.items())) or "none"
+    print(f"Ingested {ing['sessions']} sessions ({src_str}), {ing['new_messages']} new messages"
           + (f" (skipped {ing['skipped']} outside --project)" if ing.get('skipped') else ""))
     print(f"Indexed:  {counts['projects']} projects, {counts['sessions']} sessions, "
           f"{counts['messages']} messages")

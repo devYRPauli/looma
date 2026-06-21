@@ -8,6 +8,8 @@ Two phases keep the system idempotent (ARCHITECTURE.md 14):
 """
 
 import json
+import os
+from pathlib import Path
 
 from . import confidence, correction, gitutil, identity
 from .adapters.claude import ClaudeAdapter
@@ -26,22 +28,41 @@ _DERIVED_TABLES = [
 ]
 
 
-def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=None,
-                    verbose=False) -> dict:
-    """Discover Claude sessions, insert new messages idempotently. Returns counts.
+def default_adapters():
+    """All available source adapters (Claude + Codex + Cursor when present)."""
+    from .adapters.codex import CodexAdapter
+    from .adapters.cursor import CursorAdapter, default_global_db
 
-    limit: stop after this many sessions are ingested (quick demos).
-    project_filter: canonical_key; only ingest sessions resolving to that project.
+    adapters = [ClaudeAdapter(claude_projects_dir())]
+    codex_root = Path(os.path.expanduser("~")) / ".codex"
+    if (codex_root / "sessions").exists():
+        adapters.append(CodexAdapter(codex_root))
+    if default_global_db().exists():
+        adapters.append(CursorAdapter(default_global_db()))
+    return adapters
+
+
+def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=None,
+                    verbose=False, adapters=None) -> dict:
+    """Discover sessions from all adapters, insert messages idempotently. Returns counts.
+
+    limit: stop after this many sessions (quick demos). project_filter: canonical_key.
+    projects_dir: restrict to a Claude dir (used by tests). adapters: explicit override.
     """
-    base = projects_dir or claude_projects_dir()
-    adapter = ClaudeAdapter(base)
+    if adapters is None:
+        adapters = [ClaudeAdapter(projects_dir)] if projects_dir else default_adapters()
     new_msgs = 0
     sessions_seen = 0
     skipped = 0
-    for handle in adapter.discover():
+    per_source: dict[str, int] = {}
+    for adapter in adapters:
+      for handle in adapter.discover():
         if limit is not None and sessions_seen >= limit:
             break
-        events = list(adapter.read(handle))
+        try:
+            events = list(adapter.read(handle))
+        except Exception:
+            continue
         if not events:
             continue
         # project identity from the session's first event that carries a cwd
@@ -56,6 +77,7 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
             skipped += 1
             continue
         sessions_seen += 1
+        per_source[handle.source] = per_source.get(handle.source, 0) + 1
         pid = store.upsert_project(
             ident["canonical_key"], ident["display_name"],
             ident["root_path"], ident["git_remote"],
@@ -75,7 +97,8 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
             if store.insert_message(sid, ev) is not None:
                 new_msgs += 1
     store.commit()
-    return {"sessions": sessions_seen, "new_messages": new_msgs, "skipped": skipped}
+    return {"sessions": sessions_seen, "new_messages": new_msgs, "skipped": skipped,
+            "per_source": per_source}
 
 
 def rebuild(store: Store) -> dict:
