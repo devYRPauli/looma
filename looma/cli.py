@@ -282,6 +282,29 @@ def cmd_brief(args) -> int:
     return 0
 
 
+def cmd_today(args) -> int:
+    from . import today as today_mod
+    store = _open_store(args)
+    days = getattr(args, "days", None) or 7
+    vstore = _vstore(args)
+    # explicit --project, else current dir; if neither resolves, cross-project view
+    proj = None
+    if getattr(args, "project", None):
+        proj = store.find_project_by_key(args.project)
+        if not proj:
+            print(f"No project with key '{args.project}'. Try `looma status`.", file=sys.stderr)
+            store.close()
+            return 1
+    else:
+        proj = _resolve_current_project(store)
+    if proj and not getattr(args, "all", False):
+        print(today_mod.format_today(today_mod.build(store, proj, days=days, vstore=vstore)))
+    else:
+        print(today_mod.format_today(today_mod.build_cross_project(store, days=days, vstore=vstore)))
+    store.close()
+    return 0
+
+
 def cmd_timeline(args) -> int:
     from . import timeline as tl
     from .correction import resolve_workitem
@@ -565,6 +588,12 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("goal", nargs="*", help="optional goal, e.g. auth")
     pr.add_argument("--project", help="project canonical key (default: current dir)")
     pr.set_defaults(func=cmd_resume)
+
+    pty = sub.add_parser("today", parents=[common], help="daily driver: working on / changed / blocked / next")
+    pty.add_argument("--project", help="project canonical key (default: current dir)")
+    pty.add_argument("--all", action="store_true", help="cross-project view of recently touched repos")
+    pty.add_argument("--days", type=int, default=7, help="recency window in days (default 7)")
+    pty.set_defaults(func=cmd_today)
 
     pbr = sub.add_parser("brief", parents=[common], help="60-second project orientation")
     pbr.add_argument("--project", help="project canonical key (default: current dir)")

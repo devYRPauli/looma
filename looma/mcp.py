@@ -1,7 +1,7 @@
 """Minimal MCP server (goal Phase 4) - lets any MCP agent consume Looma context.
 
 Pure stdlib: JSON-RPC 2.0 over newline-delimited stdio. No dependency, no network,
-no hosted service - fully local. Tools: resume_work, brief, ask, timeline, explain, list_work, recall.
+no hosted service - fully local. Tools: today, resume_work, brief, ask, timeline, explain, list_work, recall.
 Run via `looma mcp` (typically launched by the agent inside the project directory).
 """
 
@@ -26,6 +26,10 @@ TOOLS = [
      "description": "Reconstruct the active work for a goal: WorkItem, decisions, blockers, bugs, commits, files, next step.",
      "inputSchema": {"type": "object", "properties": {**_OPT_PROJECT,
                      "goal": {"type": "string", "description": "what to resume, e.g. 'auth'"}}}},
+    {"name": "today",
+     "description": "Daily driver: what you're working on, what changed recently, what's blocked, what to do next - plus other repos touched recently.",
+     "inputSchema": {"type": "object", "properties": {**_OPT_PROJECT,
+                     "days": {"type": "integer", "description": "recency window (default 7)"}}}},
     {"name": "brief",
      "description": "60-second project orientation: summary, active work, recent decisions, risks, blockers, recent commits, suggested next work.",
      "inputSchema": {"type": "object", "properties": {**_OPT_PROJECT}}},
@@ -73,6 +77,14 @@ class _Server:
             return self._no_project(a)
         res = resume_mod.resume(self.store, proj, a.get("goal", ""), vstore=self.vstore)
         return _fmt_resume(res, proj)
+
+    def today(self, a):
+        from . import today as today_mod
+        days = a.get("days") or 7
+        proj = self._project(a)
+        if not proj:
+            return today_mod.format_today(today_mod.build_cross_project(self.store, days=days, vstore=self.vstore))
+        return today_mod.format_today(today_mod.build(self.store, proj, days=days, vstore=self.vstore))
 
     def brief(self, a):
         from . import brief as brief_mod

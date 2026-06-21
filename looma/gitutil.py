@@ -60,16 +60,30 @@ def current_branch(cwd: Optional[str]) -> Optional[str]:
 
 
 def dirty_files(cwd: Optional[str]) -> list[str]:
-    out = _run(["git", "status", "--porcelain"], cwd)
-    if not out:
+    # NUL-delimited and parsed here (not via _run) because _run strips leading
+    # whitespace, which eats the porcelain status field's leading space (" M path")
+    # and truncated the path by one char (e.g. "looma/cli.py" -> "ooma/cli.py").
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain", "-z"],
+            cwd=cwd, capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if out.returncode != 0:
         return []
     files = []
-    for line in out.splitlines():
-        # format: "XY path" (path may be quoted/renamed); take last token best-effort
-        parts = line[3:].strip()
-        if " -> " in parts:
-            parts = parts.split(" -> ")[-1]
-        files.append(parts.strip().strip('"'))
+    records = [r for r in out.stdout.split("\0") if r]
+    skip_next = False
+    for rec in records:
+        if skip_next:  # rename/copy source path field - skip it
+            skip_next = False
+            continue
+        status, path = rec[:2], rec[3:]
+        if "R" in status or "C" in status:
+            skip_next = True
+        if path:
+            files.append(path.strip('"'))
     return files
 
 

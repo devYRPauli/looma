@@ -19,8 +19,8 @@ class McpTest(unittest.TestCase):
         self.assertEqual(resp[0]["id"], 1)
         self.assertEqual(resp[0]["result"]["serverInfo"]["name"], "looma")
         names = {t["name"] for t in resp[1]["result"]["tools"]}
-        self.assertEqual(names, {"resume_work", "brief", "ask", "timeline", "explain",
-                                 "list_work", "recall"})
+        self.assertEqual(names, {"today", "resume_work", "brief", "ask", "timeline",
+                                 "explain", "list_work", "recall"})
 
     def test_tools_call_unknown_project_is_graceful(self):
         resp = drive([{"jsonrpc": "2.0", "id": 3, "method": "tools/call",
