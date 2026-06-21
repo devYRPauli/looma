@@ -660,6 +660,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else list(argv)
+    # Bare `looma` runs the daily driver - the habit should be zero-friction: you
+    # sit down, type `looma`, and see what you're on / what changed / what's next.
+    if not argv:
+        argv = ["today"]
     args = build_parser().parse_args(argv)
     start = time.perf_counter()
     rc = args.func(args)
