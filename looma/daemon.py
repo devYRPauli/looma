@@ -40,10 +40,15 @@ def transcript_mtime() -> float:
 
 
 def cycle(store: Store, adapters=None) -> dict:
-    """One incremental ingest; rebuild only when new messages arrived."""
+    """One incremental ingest; rebuild only the projects that actually changed.
+
+    Rebuilding all projects on every edit was the daemon's main cost. Now only
+    repos with new messages are re-derived, so steady-state cost scales with what
+    you touched, not your whole history."""
     ing = pipeline.ingest_messages(store, adapters=adapters)
-    if ing["new_messages"] > 0:
-        pipeline.rebuild(store)
+    changed = ing.get("changed_projects") or []
+    if changed:
+        pipeline.rebuild(store, project_ids=changed)
     return ing
 
 

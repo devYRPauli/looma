@@ -55,6 +55,7 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
     sessions_seen = 0
     skipped = 0
     per_source: dict[str, int] = {}
+    changed_projects: set[int] = set()
     for adapter in adapters:
       for handle in adapter.discover():
         if limit is not None and sessions_seen >= limit:
@@ -96,26 +97,61 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
         for ev in events:
             if store.insert_message(sid, ev) is not None:
                 new_msgs += 1
+                changed_projects.add(pid)
     store.commit()
     return {"sessions": sessions_seen, "new_messages": new_msgs, "skipped": skipped,
-            "per_source": per_source}
+            "per_source": per_source, "changed_projects": sorted(changed_projects)}
 
 
-def rebuild(store: Store) -> dict:
-    """Regenerate all derived data from stored messages. Idempotent."""
+def _wipe_all(store: Store) -> None:
     for t in _DERIVED_TABLES:
         store.conn.execute(f"DELETE FROM {t}")
     store.conn.execute("DELETE FROM fts_workitems")
     store.conn.execute("DELETE FROM fts_entities")
+
+
+def _wipe_project(store: Store, pid: int) -> None:
+    """Delete one project's derived rows in FK-safe order (for incremental rebuild)."""
+    c = store.conn
+    # FTS rows first (keyed by the work_item / entity rowid)
+    c.execute("DELETE FROM fts_workitems WHERE rowid IN (SELECT id FROM work_items WHERE project_id=?)", (pid,))
+    c.execute("DELETE FROM fts_entities WHERE rowid IN (SELECT id FROM entities WHERE project_id=?)", (pid,))
+    # join-table children
+    c.execute("DELETE FROM edges WHERE src_node IN (SELECT id FROM nodes WHERE project_id=?) "
+              "OR dst_node IN (SELECT id FROM nodes WHERE project_id=?)", (pid, pid))
+    c.execute("DELETE FROM entity_evidence WHERE entity_id IN (SELECT id FROM entities WHERE project_id=?)", (pid,))
+    c.execute("DELETE FROM commit_files WHERE commit_id IN (SELECT id FROM commits WHERE project_id=?)", (pid,))
+    # project-scoped tables (child -> parent)
+    for t in ("nodes", "entities", "candidate_memories", "commits", "files", "branches", "work_items"):
+        c.execute(f"DELETE FROM {t} WHERE project_id=?", (pid,))
+
+
+def rebuild(store: Store, project_ids=None) -> dict:
+    """Regenerate derived data from stored messages. Idempotent.
+
+    project_ids=None rebuilds everything (full wipe). A subset rebuilds only those
+    projects (incremental) - the daemon uses this so an edit to one repo does not
+    re-derive all of them."""
+    if project_ids is None:
+        _wipe_all(store)
+        projects = store.list_projects()
+        incremental = False
+    else:
+        ids = set(project_ids)
+        for pid in ids:
+            _wipe_project(store, pid)
+        projects = [p for p in store.list_projects() if p["id"] in ids]
+        incremental = True
     store.commit()
 
     extractor = extractor_mod.get_extractor()  # chosen once per rebuild (auto-detects)
     totals = {"work_items": 0, "candidates": 0, "promoted": 0}
-    for project in store.list_projects():
+    for project in projects:
         totals_p = _rebuild_project(store, project, extractor)
         for k in totals:
             totals[k] += totals_p[k]
     totals["extractor"] = extractor.name
+    totals["incremental"] = incremental
     store.commit()
     _populate_vectors(store)
     return totals
