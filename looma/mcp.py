@@ -1,7 +1,7 @@
 """Minimal MCP server (goal Phase 4) - lets any MCP agent consume Looma context.
 
 Pure stdlib: JSON-RPC 2.0 over newline-delimited stdio. No dependency, no network,
-no hosted service - fully local. Tools: today, weekly, resume_work, brief, pack, ask, timeline, explain, list_work, recall.
+no hosted service - fully local. Tools: today, weekly, resume_work, brief, pack, inspect, ask, timeline, explain, list_work, recall.
 Run via `looma mcp` (typically launched by the agent inside the project directory).
 """
 
@@ -43,6 +43,9 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {**_OPT_PROJECT,
                      "budget": {"type": "integer", "description": "token budget (default 900)"},
                      "min_confidence": {"type": "number", "description": "drop memories below this confidence"}}}},
+    {"name": "inspect",
+     "description": "Understand a repository without reading its transcripts: architecture, active systems, ownership clusters, risks, recent change hotspots.",
+     "inputSchema": {"type": "object", "properties": {**_OPT_PROJECT}}},
     {"name": "ask",
      "description": "Search validated project memory and work items.",
      "inputSchema": {"type": "object", "properties": {**_OPT_PROJECT,
@@ -116,6 +119,13 @@ class _Server:
         if not proj:
             return self._no_project(a)
         return brief_mod.format_brief(brief_mod.build(self.store, proj, vstore=self.vstore))
+
+    def inspect(self, a):
+        from . import inspect as inspect_mod
+        proj = self._project(a)
+        if not proj:
+            return self._no_project(a)
+        return inspect_mod.format_inspect(inspect_mod.build(self.store, proj, vstore=self.vstore))
 
     def ask(self, a):
         proj = self._project(a)

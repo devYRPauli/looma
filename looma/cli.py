@@ -311,6 +311,23 @@ def cmd_pack(args) -> int:
     return 0
 
 
+def cmd_inspect(args) -> int:
+    from . import inspect as inspect_mod
+    store = _open_store(args)
+    proj = _pick_project(store, args)
+    if not proj:
+        store.close()
+        return 1
+    x = inspect_mod.build(store, proj, vstore=_vstore(args))
+    if getattr(args, "json", False):
+        import json as _json
+        print(_json.dumps(x, default=str, indent=2))
+    else:
+        print(inspect_mod.format_inspect(x))
+    store.close()
+    return 0
+
+
 def cmd_weekly(args) -> int:
     from . import weekly as weekly_mod
     store = _open_store(args)
@@ -658,6 +675,12 @@ def build_parser() -> argparse.ArgumentParser:
                      dest="min_confidence", help="drop memories below this confidence")
     ppk.add_argument("--json", action="store_true", help="emit structured JSON")
     ppk.set_defaults(func=cmd_pack)
+
+    pin = sub.add_parser("inspect", parents=[common],
+                         help="understand a repo: architecture, systems, ownership, risks, hotspots")
+    pin.add_argument("--project", help="project canonical key (default: current dir)")
+    pin.add_argument("--json", action="store_true", help="emit structured JSON")
+    pin.set_defaults(func=cmd_inspect)
 
     ptl = sub.add_parser("timeline", parents=[common], help="show a work item's evolution over time")
     ptl.add_argument("work", nargs="*", help="work item id (#5) or goal text")

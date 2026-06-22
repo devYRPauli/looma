@@ -19,7 +19,7 @@ class McpTest(unittest.TestCase):
         self.assertEqual(resp[0]["id"], 1)
         self.assertEqual(resp[0]["result"]["serverInfo"]["name"], "looma")
         names = {t["name"] for t in resp[1]["result"]["tools"]}
-        self.assertEqual(names, {"today", "weekly", "resume_work", "brief", "pack", "ask",
+        self.assertEqual(names, {"today", "weekly", "resume_work", "brief", "pack", "inspect", "ask",
                                  "timeline", "explain", "list_work", "recall"})
 
     def test_tools_call_unknown_project_is_graceful(self):
