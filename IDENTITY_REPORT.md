@@ -41,7 +41,7 @@ Sessions whose cwd was a scratch path created real-looking projects:
 | `tmp`        | `/private/tmp`                                    | 298      |
 | `/`          | `/`                                               | 7        |
 | `T`          | `/private/var/folders/.../T` (macOS scratch)      | 5        |
-| `yashrajpandey` | `/Users/<home>` (home dir itself)              | 12       |
+| `<user>`     | `/Users/<home>` (home dir itself)                 | 12       |
 | `projects`   | `/Users/<home>/.claude/projects`                  | 1        |
 
 The 298-session `tmp` project is the tell: those are the programmatic
