@@ -39,7 +39,11 @@ def format_timeline(wi: dict, events: list[dict]) -> str:
         head.append(f"{len(events)} events  ({span})\n")
     else:
         head.append("(no timeline events yet)\n")
-    for e in events:
+    # keep the most recent 20 events so a long-lived work item stays cheap (MCP)
+    shown = events[-20:]
+    if len(events) > 20:
+        head.append(f"  ... +{len(events) - 20} earlier events")
+    for e in shown:
         head.append(f"  {(e['ts'] or '?')[:10]}  {e['type']:13} {e['text']}")
     head.append(f"\ncurrent status: {wi.get('status')}/{wi['lifecycle']}, "
                 f"last active {(wi.get('last_active') or '?')[:10]}")

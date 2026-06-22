@@ -93,28 +93,31 @@ def format_explain(x: dict) -> str:
                  + (f" by {', '.join(x['agents'])}" if x["agents"] else "")
                  + f", touching {len(x['files'])} file(s).")
 
+    # bounded lists keep explain cheap on large work items (MCP efficiency)
     L.append("\nHOW IT EVOLVED")
     if x["evolution"]:
-        for e in x["evolution"]:
+        for e in x["evolution"][:12]:
             L.append(f"  {(e['ts'] or '?')[:10]}  {e['type']:11} {to_ascii(e['text'])}")
+        if len(x["evolution"]) > 12:
+            L.append(f"  ... +{len(x['evolution']) - 12} earlier events")
     else:
         L.append("  (no dated events)")
 
     L.append("\nDECISIONS THAT SHAPED IT")
     if x["decisions"]:
-        for d in x["decisions"]:
+        for d in x["decisions"][:8]:
             L.append(f"  - {d['title']}")
     else:
         L.append("  (none captured)")
 
     if x["bugs"]:
         L.append("\nBUGS ALONG THE WAY")
-        for b in x["bugs"]:
+        for b in x["bugs"][:6]:
             L.append(f"  (!) {b['title']}")
 
     if x["open_todos"]:
         L.append("\nSTILL OPEN")
-        for t in x["open_todos"]:
+        for t in x["open_todos"][:8]:
             L.append(f"  [ ] {t['title']}")
 
     L.append("\nWHAT CHANGED")

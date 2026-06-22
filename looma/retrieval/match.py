@@ -48,12 +48,34 @@ def soft_sim(goal: str, text: str) -> float:
     return hits / len(gt)
 
 
+# light suffix stripping so a query token prefix-matches its morphological
+# variants ("extraction" -> "extract*" catches extracting/extracted/extractor).
+# Longest suffix first; only applied when the stem stays >= 4 chars.
+_SUFFIXES = ("izations", "isations", "ization", "isation", "ations", "ation",
+             "ings", "ing", "ments", "ment", "ence", "ance", "tion", "sion",
+             "edly", "ers", "ors", "ity", "ive", "es", "ed", "ly", "s")
+
+
+def _stem(t: str) -> str:
+    for suf in _SUFFIXES:
+        if t.endswith(suf) and len(t) - len(suf) >= 4:
+            return t[: len(t) - len(suf)]
+    return t
+
+
 def fts_query(text: str) -> str:
-    """Build a safe FTS5 OR query from free text."""
+    """Build a safe FTS5 OR query from free text, with prefix/stem tolerance.
+
+    Each token becomes a prefix match on its stem (recall across inflections);
+    short tokens stay exact (precision). FTS5 prefix syntax is `term*`."""
     toks = [t for t in _FTS_SAFE.sub(" ", (text or "").lower()).split() if len(t) > 1]
     if not toks:
         return ""
-    return " OR ".join(f'"{t}"' for t in toks)
+    terms = []
+    for t in toks:
+        stem = _stem(t)
+        terms.append(f"{stem}*" if len(stem) >= 4 else f'"{t}"')
+    return " OR ".join(terms)
 
 
 def match_work_items(store, project_id: int, goal: str, vstore=None) -> list[dict]:
