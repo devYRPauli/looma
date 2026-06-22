@@ -54,6 +54,41 @@ def is_noise(text: str) -> bool:
     return any(p in low for p in _NOISE_PHRASES)
 
 
+# Programmatic / synthetic sessions: API calls made BY tooling (memory-log
+# summarizers, compression jobs, Looma's own extractor, one-shot "you are X"
+# prompts) that land in the transcript dirs. They are not human coding work and
+# must not generate WorkItems or memories - on the real corpus they were 48% of
+# sessions and 84% of "Untitled work". The signature is an instruction-prompt
+# opening in the first real user turn; these sessions are always short.
+_SYNTHETIC_PROMPT = re.compile(
+    r"(?i)you are summariz|non-destructive compression|daily memory log|"
+    r"conversation extract below|memory entry in this exact format|"
+    r"extract structured project memory|reply with only|respond with only|"
+    r"output only|return only the|in this exact format|"
+    r"you are an? (?:helpful|world-class|senior|expert|coding|summariz)|"
+    r"your task is to (?:summariz|extract|classif|rewrite|compress|score|rank)"
+)
+
+
+def _first_user_text(messages: list[dict]) -> str:
+    for m in messages:
+        if m.get("role") == "user":
+            t = strip_injected(m.get("text") or "").strip()
+            if t:
+                return t
+    return ""
+
+
+def is_automated_session(messages: list[dict]) -> bool:
+    """True if a session is a programmatic API call, not human coding work.
+
+    Detected from a synthetic instruction-prompt opening in the first user turn.
+    Such sessions are excluded from WorkItem and candidate-memory generation so
+    the graph reflects real work. Their raw messages are still stored.
+    """
+    return bool(_SYNTHETIC_PROMPT.search(_first_user_text(messages)[:600]))
+
+
 # code / diff / log fragments that must never surface as a title, memory, or
 # next step. Shared by retrieval (display-time filtering) and extraction.
 _CODE_FRAGMENT = re.compile(

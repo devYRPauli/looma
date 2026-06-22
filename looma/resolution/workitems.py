@@ -14,15 +14,27 @@ from ..sanitize import is_noise, looks_like_code, strip_injected
 from ..util import jaccard, prettify_label, text_sim
 
 _INTENT = re.compile(
-    r"(?i)\b(implement|build|create|add|fix|refactor|migrate|investigate|debug|continue|set up|wire up)\b\s+(.{3,60})"
+    r"(?i)\b(implement(?:ing)?|build(?:ing)?|creat(?:e|ing)|add(?:ing)?|fix(?:ing)?|"
+    r"refactor(?:ing)?|migrat(?:e|ing)|investigat(?:e|ing)|debug(?:ging)?|"
+    r"continu(?:e|ing)|set(?:ting)? up|wir(?:e|ing) up|switch(?:ing)? to)\b\s+(.{3,60})"
 )
+# verb-stem -> canonical verb (so -ing/-ion forms map to the right kind/label)
+_VERB_STEM = [
+    ("migrat", "migrate"), ("investigat", "investigate"), ("refactor", "refactor"),
+    ("debug", "debug"), ("implement", "implement"), ("continu", "continue"),
+    ("switch", "switch to"), ("creat", "create"), ("build", "build"),
+    ("set", "set up"), ("wir", "wire up"), ("add", "add"), ("fix", "fix"),
+]
 _CODEISH = re.compile(r"[{}<>=+|;`\\]")
 # SQL/DDL and dotted-identifier / quoted-ternary patterns the verb regex would
 # otherwise scrape out of pasted code, docs, and JSX (Phase 1: a big source of
 # garbage titles like 'Create TABLE IF NOT EXISTS Projects').
 _NOT_INTENT = re.compile(
-    r"(?i)\b(?:table|select|insert into|values|from|where|join|index|constraint|"
-    r"primary key|foreign key|not null|varchar|integer)\b"
+    # contiguous SQL structure only - bare words like "table"/"from"/"where"
+    # are ordinary English and must not reject prose ("migrate the users table")
+    r"(?i)\b(?:create|alter|drop) table\b|\binsert into\b|\bselect\b.+\bfrom\b|"
+    r"\bvalues\s*\(|\b(?:primary|foreign) key\b|\bnot null\b|\bvarchar\s*\(|"
+    r"create table if not exists"
     r"|\w\.\w"                 # dotted identifier, e.g. store.set_defaults
     r'|"\s*[:?]'              # quoted ternary / JSX string literal
     r"|\)\.\w"                # method chain
@@ -65,16 +77,20 @@ def _intent(messages: list[dict]) -> tuple[Optional[str], str]:
             match = _INTENT.search(line)
             if not match:
                 continue
-            verb_phrase = match.group(1).lower()
-            verb = verb_phrase.split()[0]
-            tail = _STOP_TAIL.sub("", match.group(2)).strip().strip("`\"'.,:;()[]")
+            raw_verb = match.group(1).lower()
+            # normalize an inflected verb ("migrating") to its canonical form
+            verb = next((canon for stem, canon in _VERB_STEM if raw_verb.startswith(stem)), raw_verb)
+            # trim the tail at the first clause boundary so a trailing ";" or "."
+            # (legitimate prose punctuation) does not poison the label
+            tail = re.split(r"[;.]\s|,\s+(?:and|so|which|but)\b", match.group(2))[0]
+            tail = _STOP_TAIL.sub("", tail).strip().strip("`\"'.,:;()[]")
             tail = _LEAD_FILLER.sub("", tail).strip()
             # reject code fragments and tails without at least two real words
             if (not tail or _CODEISH.search(tail) or _NOT_INTENT.search(tail)
                     or len(_ALPHA_TOK.findall(tail)) < 2):
                 continue
             kind = _KIND.get(verb, "feature")
-            return f"{verb_phrase} {tail}".strip()[:60], kind
+            return f"{verb} {tail}".strip()[:60], kind
     return None, "feature"
 
 

@@ -82,5 +82,52 @@
       "architecture": [],
       "work": {"keywords": ["memory", "leak", "investigat"], "kind": "investigation"}
     }
+  },
+  {
+    "name": "fix_narration_negative",
+    "messages": [
+      {"role": "user", "text": "Let's add a retry wrapper around the outbound HTTP calls."},
+      {"role": "assistant", "text": "Done. I've fixed both timeout issues and the suite that was failing before passes now."},
+      {"role": "assistant", "text": "remotes/origin/fix/retry-wrapper\nagent-edit-regression.test.ts: FAIL -> FAIL\nNo regression in the provider policy."},
+      {"role": "user", "text": "We still need to document the backoff policy."}
+    ],
+    "gold": {
+      "decisions": [],
+      "todos": ["document the backoff policy"],
+      "bugs": [],
+      "architecture": [],
+      "work": {"keywords": ["retry", "wrapper", "http"], "kind": "feature"}
+    }
+  },
+  {
+    "name": "leader_election",
+    "messages": [
+      {"role": "user", "text": "We're going to use Postgres advisory locks instead of a Redis mutex for the cron leader election."},
+      {"role": "assistant", "text": "Architecturally, the leader election must be idempotent so a re-run after a crash is safe."},
+      {"role": "user", "text": "We also need to add a Prometheus gauge for the current leader."}
+    ],
+    "gold": {
+      "decisions": ["use Postgres advisory locks instead of a Redis mutex"],
+      "todos": ["add a Prometheus gauge for the current leader"],
+      "bugs": [],
+      "architecture": ["leader election must be idempotent so a re-run after a crash is safe"],
+      "work": {"keywords": ["leader", "election", "lock"], "kind": "feature"}
+    }
+  },
+  {
+    "name": "safari_export",
+    "messages": [
+      {"role": "user", "text": "The export button does not work on Safari - clicking it never triggers the download."},
+      {"role": "assistant", "text": "Let me reproduce. The handler returns the wrong content-type on Safari so the browser ignores it."},
+      {"role": "assistant", "text": "const blob = new Blob([csv]);\nif (!ok) { return; }"},
+      {"role": "user", "text": "We need to add a Safari integration test for the export path."}
+    ],
+    "gold": {
+      "decisions": [],
+      "todos": ["add a Safari integration test for the export path"],
+      "bugs": ["export button does not work on Safari, clicking never triggers the download"],
+      "architecture": [],
+      "work": {"keywords": ["export", "safari"], "kind": "bugfix"}
+    }
   }
 ]

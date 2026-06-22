@@ -196,15 +196,25 @@ def _rebuild_project(store: Store, project: dict, extractor=None) -> dict:
     validate = _make_sha_validator(store, root)
 
     # ---- per-session deterministic artifacts + work signals ----
+    # Synthetic/programmatic sessions (memory-log summarizers, compression jobs,
+    # one-shot prompts) are not human coding work; they generate no WorkItems or
+    # memories (sanitize.is_automated_session). On the real corpus they were 48%
+    # of sessions and 84% of "Untitled work".
+    from .sanitize import is_automated_session
     signals = []
     session_artifacts = {}
     session_msgs = {}
+    work_sessions = []
     for s in sessions:
         msgs = store.session_messages(s["id"])
         session_msgs[s["id"]] = msgs
+        if is_automated_session(msgs):
+            continue
+        work_sessions.append(s)
         arts = deterministic.session_artifacts(msgs, root, validate=validate)
         session_artifacts[s["id"]] = arts
         signals.append(wi_mod.build_session_signal(s, msgs, arts["files"]))
+    sessions = work_sessions
 
     builders = wi_mod.resolve(signals)
 
@@ -315,13 +325,19 @@ def _rebuild_project(store: Store, project: dict, extractor=None) -> dict:
     for m in merged.values():
         wi = store.get_work_item(m["work_item_id"]) if m["work_item_id"] else None
         wi_commits = bool(store.work_item_commits(pid, wi["id"])) if wi else False
-        cand_conf = confidence.score(
+        own = confidence.score(
             file_overlap=0.0,
             has_commit=wi_commits,
             n_sessions=len(m["session_refs"]),
             n_agents=len(m["agent_refs"]),
             span_days=_span(m["first_seen"], m["last_seen"]),
         )
+        # Calibration (V2): a memory documents its WorkItem, so it inherits that
+        # work's grounding. Without this a memory's file_overlap is always 0, so
+        # promoted memories scored ~0.00 confidence - "validated" yet near-zero.
+        # Blend own corroboration with the parent WorkItem's confidence.
+        wi_conf = wi["confidence"] if wi else 0.0
+        cand_conf = round(min(1.0, 0.6 * own + 0.4 * wi_conf), 4)
         # human-correction override on this memory (ARCHITECTURE.md 13.2)
         override = corr.mem.get((m["kind"], correction.norm(m["title"])))
         force_p = override == "promote"
