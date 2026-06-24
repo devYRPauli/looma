@@ -58,6 +58,15 @@ class _Ev:
         ]
 
 
+class _ShellEv:
+    """A shell tool turn carrying a workdir (Codex-style)."""
+
+    def __init__(self, *workdirs):
+        self.tool_calls = [
+            {"name": "shell", "input": {"cmd": ["ls"], "workdir": w}} for w in workdirs
+        ]
+
+
 class ResolveFromEventsTest(unittest.TestCase):
     def test_recovers_project_from_touched_files_under_temp(self):
         # cwd was /tmp, but the real work was in a cloned repo under it
@@ -84,6 +93,17 @@ class ResolveFromEventsTest(unittest.TestCase):
 
     def test_no_touched_files_returns_none(self):
         self.assertIsNone(identity.resolve_from_events([_Ev()]))
+
+    def test_recovers_project_from_shell_workdir_under_temp(self):
+        # codex session run from home but executing commands in a /tmp checkout
+        events = [_ShellEv("/tmp/hunt-litellm", "/tmp/hunt-litellm")]
+        ident = identity.resolve_from_events(events)
+        self.assertIsNotNone(ident)
+        self.assertEqual(ident["display_name"], "hunt-litellm")
+
+    def test_ephemeral_workdir_is_ignored(self):
+        # workdir is the home dir / fs root -> no project
+        self.assertIsNone(identity.resolve_from_events([_ShellEv("/", os.path.expanduser("~"))]))
 
 
 if __name__ == "__main__":

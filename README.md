@@ -13,7 +13,11 @@ Instead of searching transcripts, Looma reconstructs:
 
 Local-first. No cloud. No API keys.
 
-> Status: **v2.0.0** - the agent context layer. Works today on Claude Code, Codex,
+![Looma demo](docs/demo/demo.gif)
+
+> Demo recorded against a synthetic sample project - see [docs/demo/](docs/demo/).
+
+> Status: **v2.1.0** - the agent context layer. Works today on Claude Code, Codex,
 > and Cursor history. Honest about what is real vs heuristic - see
 > [Current Status](#current-status).
 

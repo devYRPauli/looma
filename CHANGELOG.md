@@ -4,6 +4,18 @@ All notable changes to Looma are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses pre-1.0 alpha
 versions.
 
+## [2.1.1] - 2026-06-23
+
+### Added
+- A recorded demo (`docs/demo/demo.gif`) and static stills, embedded in the
+  README. Recorded against a fully synthetic sample project - no real history is
+  shown - and reproducible via `docs/demo/gen_demo.py` + `docs/demo/demo.tape`.
+
+### Changed
+- Project identity recovery now also reads the working directory of shell tool
+  calls (for example Codex's `workdir`), so sessions started from an ephemeral
+  directory but doing their work in a real checkout resolve to that project.
+
 ## [2.1.0] - 2026-06-23
 
 Extraction and identity accuracy, driven by testing the v2.0.0 release as a fresh

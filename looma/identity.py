@@ -57,6 +57,34 @@ def _touched_paths(events) -> list:
     return paths
 
 
+def _touched_dirs(events) -> list:
+    """Working directories the session ran commands in (e.g. a shell tool's
+    `workdir` / `cwd`). Recovers the project when the session cwd is ephemeral."""
+    dirs = []
+    for ev in events:
+        for call in getattr(ev, "tool_calls", None) or []:
+            inp = call.get("input")
+            if not isinstance(inp, dict):
+                continue
+            for key in ("workdir", "cwd"):
+                v = inp.get(key)
+                if isinstance(v, str) and v.startswith("/"):
+                    dirs.append(v)
+    return dirs
+
+
+def _temp_subdir(real: str) -> Optional[str]:
+    """temp-root + first subdir for a path under a scratch root, else None."""
+    m = _TEMP_ROOT.match(real)
+    if not m:
+        return ""  # not under a temp root (sentinel distinct from "skip")
+    rest = real[m.end():].lstrip("/")
+    first = rest.split("/", 1)[0] if rest else ""
+    if not first or _SCRATCH_SUBDIR.match(first):
+        return None
+    return m.group(1) + "/" + first
+
+
 def _candidate_project_dir(path: str) -> Optional[str]:
     """The project directory a touched file implies, or None if it is scratch.
 
@@ -65,15 +93,23 @@ def _candidate_project_dir(path: str) -> Optional[str]:
     one exists on disk, so the session merges with that project's identity.
     """
     real = os.path.realpath(path)
-    m = _TEMP_ROOT.match(real)
-    if m:
-        rest = real[m.end():].lstrip("/")
-        first = rest.split("/", 1)[0] if rest else ""
-        if not first or _SCRATCH_SUBDIR.match(first):
-            return None
-        return m.group(1) + "/" + first
-    repo = gitutil.repo_root(os.path.dirname(real))
-    return repo or None
+    sub = _temp_subdir(real)
+    if sub != "":
+        return sub  # under a temp root (a recovered subdir, or None for scratch)
+    return gitutil.repo_root(os.path.dirname(real)) or None
+
+
+def _candidate_from_dir(d: str) -> Optional[str]:
+    """The project a working directory implies (e.g. a shell tool's `workdir`),
+    or None if it is an ephemeral/scratch location. Unlike a file path, the dir
+    is itself the candidate repo root."""
+    real = os.path.realpath(d)
+    if _is_ephemeral(real):
+        return None
+    sub = _temp_subdir(real)
+    if sub != "":
+        return sub
+    return gitutil.repo_root(real) or real
 
 
 def resolve_from_events(events) -> Optional[dict]:
@@ -86,6 +122,10 @@ def resolve_from_events(events) -> Optional[dict]:
     counts: dict[str, int] = {}
     for p in _touched_paths(events):
         d = _candidate_project_dir(p)
+        if d:
+            counts[d] = counts.get(d, 0) + 1
+    for wd in _touched_dirs(events):
+        d = _candidate_from_dir(wd)
         if d:
             counts[d] = counts.get(d, 0) + 1
     if not counts:
