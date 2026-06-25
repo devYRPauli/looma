@@ -4,7 +4,21 @@ All notable changes to Looma are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses pre-1.0 alpha
 versions.
 
-## [2.1.2] - 2026-06-25
+## [2.1.3] - 2026-06-25
+
+### Changed
+- The optional local-LLM extractor now inherits the same output guards as the
+  heuristic. Model-produced memories run through a shared rejection predicate
+  (transcript/agent meta, code, action/progress narration, low-value lines),
+  are ASCII-folded, and de-duped - so the LLM cannot reintroduce the noise the
+  heuristic filters. The extraction prompt was also sharpened (ignore action
+  narration and finished work; a bug is a concrete observed wrong behavior).
+- Local model detection is now honest: a reachable server with no model loaded
+  (an idle `llama-server`, or a shim returning an empty model list) no longer
+  counts as available, so `auto` mode does not select a dead endpoint and fall
+  back on every call.
+
+
 
 ### Changed
 - Sharper `weekly` and `today` retrospectives. The decision/blocker extraction

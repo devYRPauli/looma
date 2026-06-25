@@ -93,6 +93,20 @@ def _clean(line: str) -> str:
     return re.sub(r"\s+", " ", line).strip()
 
 
+def rejects_memory(kind: str, title: str) -> bool:
+    """True if a (kind, title) memory should be dropped. Shared output-level guard:
+    the LLM extractor runs its model output through this so it inherits the same
+    transcript/agent-meta/narration rejections the heuristic enforces per line."""
+    t = to_ascii(_clean(title))
+    if not t or looks_like_code(t) or looks_like_meta(t) or is_noise(t):
+        return True
+    if _LOW_VALUE.match(t) or _ACTION.search(t):
+        return True
+    if kind == "bug":
+        return bool(_BUG_NOT.search(t))
+    return bool(_NARRATION.search(t))
+
+
 def _classify(line: str) -> Optional[str]:
     for kind, pat in _PATTERNS:
         if pat.search(line):

@@ -7,4 +7,4 @@ See ARCHITECTURE.md (v3) for the full design. This package implements the narrow
 Claude-only slice described in the Phase 1 checklist.
 """
 
-__version__ = "2.1.2"
+__version__ = "2.1.3"

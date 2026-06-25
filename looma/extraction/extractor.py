@@ -43,14 +43,19 @@ Return ONLY one JSON object, no prose:
 kind meanings (classify carefully):
 - decision: a choice made between alternatives ("use X instead of Y", "we decided").
 - todo: work still to be done ("we need to", "still need to", "TODO").
-- bug: something broken or incorrect behavior observed.
+- bug: a CONCRETE wrong behavior that was observed (a specific thing returns the
+  wrong result, crashes, or does not work). NOT a vague worry or a planned task.
 - architecture: a design rule or structural constraint.
 work.kind is one of: feature, bugfix, refactor, migration, investigation.
 
 Rules:
 - Extract ONLY what the developer EXPLICITLY stated. Do not invent or infer.
-- IGNORE filler ("let me look at...", "I'll fix that"), code, diffs, stack traces,
-  logs, lint output, and tool results. These are NOT memories.
+- IGNORE the assistant narrating its own actions ("Let me check...", "I'm adding
+  tests...", "I'll fix that", "Now I will..."), code, diffs, stack traces, logs,
+  lint output, tool results, ascii diagrams, and role-prefixed transcript lines.
+  These are NOT memories.
+- A todo/bug is OPEN work. Finished work ("done:", "tests pass", "checks passed")
+  is NOT a todo or bug.
 - No duplicates. At most 5 memories. Choose the correct kind for each.
 
 Example transcript:
@@ -114,6 +119,31 @@ def _extract_json(text: str):
     return None
 
 
+def _clean_memories(mems_raw) -> list[dict]:
+    """Validate + sanitize raw model memories. Enforces kind/length, ASCII-folds
+    titles, drops anything the shared heuristic guard rejects (transcript/agent
+    meta, narration, code), and de-dupes - so the LLM path produces the same
+    quality of output as the heuristic and cannot reintroduce filtered junk."""
+    from ..util import to_ascii
+
+    out, seen = [], set()
+    for m in (mems_raw or [])[:8]:
+        if not isinstance(m, dict):
+            continue
+        kind = (m.get("kind") or "").strip().lower()
+        title = to_ascii((m.get("title") or "").strip())
+        if kind not in MEMORY_KINDS or not (8 <= len(title) <= 200):
+            continue
+        if _cand.rejects_memory(kind, title):
+            continue
+        key = (kind, title.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"kind": kind, "title": title})
+    return out
+
+
 class LocalLLMExtractor:
     name = "llm"
 
@@ -153,14 +183,7 @@ class LocalLLMExtractor:
             mems_raw, work = (parsed.get("memories") or []), (parsed.get("work") or {})
         else:
             return self.fallback.extract(messages)
-        mems = []
-        for m in mems_raw[:8]:
-            if not isinstance(m, dict):
-                continue
-            kind = (m.get("kind") or "").strip().lower()
-            title = (m.get("title") or "").strip()
-            if kind in MEMORY_KINDS and 8 <= len(title) <= 200:
-                mems.append({"kind": kind, "title": title})
+        mems = _clean_memories(mems_raw)
         label = (str(work.get("label") or "")).strip() or None
         if label and label.lower() in ("null", "none"):
             label = None
@@ -175,9 +198,28 @@ class LocalLLMExtractor:
         return {"memories": mems, "work": {"label": label, "kind": kind}}
 
 
+def _server_model(data) -> Optional[str]:
+    """Model id from a /v1/models payload, or None when no model is loaded.
+
+    A reachable server with an empty or null model list (e.g. llama-server idle,
+    or the OpenAI-compatible shim on :8080 returning {"data": null}) must NOT
+    count as available - otherwise auto-mode picks the LLM and fails every call.
+    """
+    if not isinstance(data, dict):
+        return None
+    items = data.get("data")
+    if not isinstance(items, list) or not items:
+        return None
+    first = items[0] if isinstance(items[0], dict) else {}
+    mid = first.get("id")
+    if not isinstance(mid, str) or not mid.strip():
+        return None
+    return mid.split("/")[-1]
+
+
 @functools.lru_cache(maxsize=8)
 def detect_server(base_url: Optional[str] = None):
-    """Probe for a reachable local OpenAI-compatible model server.
+    """Probe for a reachable local OpenAI-compatible model server WITH a model.
 
     Returns (ok: bool, model_name | None). Cached per process: a short-lived CLI
     probes once. Pure stdlib (urllib) - no new dependency. Short timeout so the
@@ -188,10 +230,10 @@ def detect_server(base_url: Optional[str] = None):
     try:
         with urllib.request.urlopen(models, timeout=0.6) as r:
             data = json.loads(r.read())
-        mid = (data.get("data") or [{}])[0].get("id")
-        return (True, (mid.split("/")[-1] if mid else "local"))
     except Exception:
         return (False, None)
+    name = _server_model(data)
+    return (True, name) if name else (False, None)
 
 
 def get_extractor(name: Optional[str] = None):
