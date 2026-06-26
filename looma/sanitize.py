@@ -29,6 +29,7 @@ _NOISE_PHRASES = (
     "checklist and start", "work through this carefully", "think step by step",
     "use this before any", "before any creative work",
     "invoke any other skill", "writing-plans is the next", "fix any issues inline",
+    "from a tool result this turn",  # agent-memory-rule boilerplate bleed
 )
 
 
@@ -118,7 +119,7 @@ _META = re.compile(
     r"^\s*(?:assistant|user|human|tool|system)\s*:|"                       # assistant: ...
     r"--+>|<--+|"                                                          # ascii arrows / graph edges
     r'(?:"[^"]+"\s*,\s*){2,}|'                                             # "a", "b", quoted-vocab list
-    r"\b(?:is|are|following|below|here|these|as follows|includes?|done)\s*:\s*$|"  # dangling preamble ":"
+    r"[\w)\"']\s*:\s*$|"                                                   # dangling preamble: any line ending in "<word>:"
     r"^\s*(?:now,?\s+)?(?:move on|moving on|let'?s move on|next up)\b|"     # agent imperative
     r"^\s*(?:continue|proceed|go ahead|carry on)\b[^.]*\bnext\b|"          # "continue ... next step"
     r"^\s*(?:hi|hey|hello|good (?:morning|afternoon|evening)|thanks|thank you|where were we)\b"  # greeting

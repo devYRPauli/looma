@@ -4,6 +4,25 @@ All notable changes to Looma are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses pre-1.0 alpha
 versions.
 
+## [2.1.4] - 2026-06-26
+
+### Fixed
+- `looma weekly` / `looma today` no longer surface two classes of meta noise in
+  DECISIONS:
+  - Dangling preambles that announce a memory but carry no content ("Here's
+    where we are and the decision:"). The meta guard's trailing-colon rule was a
+    fixed word-list ("... is:", "... done:"); it is now the general structural
+    case - any line ending in "<word>:" is a preamble, not a self-contained
+    memory. Lines with a colon mid-sentence ("Decision: use gRPC over REST")
+    are unaffected.
+  - Injected agent-memory-rule boilerplate that bleeds into turns untagged
+    ("... must come from a tool result this turn, never from memory ..."), which
+    `strip_injected` misses and the architecture classifier read as a design
+    rule. Added its signature to the noise-phrase filter.
+- Both fixes route through the shared guards, so they apply to the heuristic
+  extractor, the `looma weekly` / `today` display layer, and the optional
+  local-LLM path alike. Run `looma reprocess` to apply them to an existing graph.
+
 ## [2.1.3] - 2026-06-25
 
 ### Changed

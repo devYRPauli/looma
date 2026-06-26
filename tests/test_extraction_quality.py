@@ -85,6 +85,8 @@ class MetaNoiseTest(unittest.TestCase):
         '* "we decided", "decision", "use X instead of Y"',
         "For your lab, the most important design decision is:",
         "Next step is done:",
+        "Here's where we are and the decision:",
+        "Here is the approach we will take:",
         "Now, move on to the next step then",
         "Continue to the next step now",
         "Hey! Good Morning. Where were we and what were we doing?",
@@ -94,6 +96,7 @@ class MetaNoiseTest(unittest.TestCase):
         "Architecturally, the leader election must be idempotent so a re-run is safe.",
         "The export button does not work on Safari and never triggers a download.",
         "Continue supporting the legacy v1 API until the Q3 migration lands.",
+        "Decision: use gRPC over REST for lower latency.",
     ]
 
     def test_meta_lines_flagged(self):
@@ -113,6 +116,15 @@ class MetaNoiseTest(unittest.TestCase):
     def test_real_memories_still_extracted(self):
         for line in self.REAL[:2]:  # decision + architecture lines carry a kind
             self.assertTrue(_kinds(line), f"should still extract: {line!r}")
+
+    def test_injected_memory_rule_boilerplate_is_noise(self):
+        # Agent-memory-rule instruction prose ("... must come from a tool result
+        # this turn, never from memory ...") bleeds into turns untagged, so
+        # strip_injected misses it and "must come from" reads as an architecture
+        # rule. It is injected boilerplate, not a memory. (V2.1.4)
+        line = "must come from a tool result this turn, never from memory. Definitions,"
+        self.assertTrue(sanitize.is_noise(line), f"should be noise: {line!r}")
+        self.assertEqual(_kinds(line), [], f"should yield no candidate: {line!r}")
 
 
 class NarrationTest(unittest.TestCase):
