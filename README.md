@@ -1,5 +1,9 @@
 # Looma
 
+[![PyPI version](https://img.shields.io/pypi/v/looma.svg)](https://pypi.org/project/looma/)
+[![Python versions](https://img.shields.io/pypi/pyversions/looma.svg)](https://pypi.org/project/looma/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/devYRPauli/looma/blob/main/LICENSE)
+
 **Looma turns coding-agent history into resumable project context.**
 
 Instead of searching transcripts, Looma reconstructs:
@@ -25,13 +29,19 @@ Local-first. No cloud. No API keys.
 
 ## Install
 
-From source (standard-library Python 3.10+, zero third-party dependencies):
+Standard-library Python 3.10+, zero third-party dependencies:
+
+```bash
+pip install looma     # exposes the `looma` binary
+looma doctor          # verify your environment
+```
+
+Or from source:
 
 ```bash
 git clone https://github.com/devYRPauli/looma
 cd looma
-pip install -e .      # exposes the `looma` binary
-looma doctor          # verify your environment
+pip install -e .
 ```
 
 Prefer no install? Run `python3 -m looma <cmd>` from the repo.
