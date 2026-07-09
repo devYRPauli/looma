@@ -116,7 +116,7 @@ Control it explicitly with `LOOMA_EXTRACTOR=auto|heuristic|llm` (default `auto`)
 for another agent, 2985x lighter than the raw transcript) and `looma inspect`
 (understand a repo - architecture, systems, ownership, risks - without reading the
 transcripts), on top of a sharper extractor (Untitled work 45%->13%, bug
-overclassification 79%->38%, benchmark F1 0.69->0.90) and clean identities
+overclassification 79%->38%) and clean identities
 (72->24 projects). See the [CHANGELOG](https://github.com/devYRPauli/looma/blob/main/CHANGELOG.md) for the full history.
 
 Built on **v1.6.0** - the daily loop: `looma today` (bare `looma`) and
