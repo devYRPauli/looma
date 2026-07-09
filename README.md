@@ -13,11 +13,11 @@ Instead of searching transcripts, Looma reconstructs:
 
 Local-first. No cloud. No API keys.
 
-![Looma demo](docs/demo/demo.gif)
+![Looma demo](https://raw.githubusercontent.com/devYRPauli/looma/main/docs/demo/demo.gif)
 
-> Demo recorded against a synthetic sample project - see [docs/demo/](docs/demo/).
+> Demo recorded against a synthetic sample project - see [docs/demo/](https://github.com/devYRPauli/looma/tree/main/docs/demo).
 
-> Status: **v2.1.0** - the agent context layer. Works today on Claude Code, Codex,
+> Status: **v2.1.5** - the agent context layer. Works today on Claude Code, Codex,
 > and Cursor history. Honest about what is real vs heuristic - see
 > [Current Status](#current-status).
 
@@ -60,7 +60,7 @@ and a next likely step - each with a confidence score. If Looma is not sure, it
 says so and shows alternatives instead of guessing.
 
 Looma has been exercised on hundreds of sessions across a dozen projects; see
-[docs/demo/](docs/demo/) for the recorded demo.
+[docs/demo/](https://github.com/devYRPauli/looma/tree/main/docs/demo) for the recorded demo.
 
 ## How it works
 
@@ -85,7 +85,7 @@ Resume Bundle         (WorkItem-first context, git-anchored, honest about certai
 
 Everything runs on your machine over SQLite + FTS5. Commits and file paths come
 from your repo (git is ground truth), never invented. Full design:
-[ARCHITECTURE.md](ARCHITECTURE.md).
+[ARCHITECTURE.md](https://github.com/devYRPauli/looma/blob/main/ARCHITECTURE.md).
 
 ## Extraction: zero-dependency default, optional local LLM
 
@@ -117,7 +117,7 @@ for another agent, 2985x lighter than the raw transcript) and `looma inspect`
 (understand a repo - architecture, systems, ownership, risks - without reading the
 transcripts), on top of a sharper extractor (Untitled work 45%->13%, bug
 overclassification 79%->38%, benchmark F1 0.69->0.90) and clean identities
-(72->24 projects). See the [CHANGELOG](CHANGELOG.md) for the full history.
+(72->24 projects). See the [CHANGELOG](https://github.com/devYRPauli/looma/blob/main/CHANGELOG.md) for the full history.
 
 Built on **v1.6.0** - the daily loop: `looma today` (bare `looma`) and
 `looma weekly` - and the v1.5 refinement.
@@ -132,7 +132,7 @@ Built on **v1.6.0** - the daily loop: `looma today` (bare `looma`) and
 - WorkItem-first resume bundles with explicit uncertainty handling
 - **Hybrid retrieval**: graph + FTS5 + optional semantic vectors (sqlite-vec)
 - Optional fully-local LLM extractor, **auto-detected** when a local model server is
-  running (F1 0.96 vs 0.69 on the benchmark); the stdlib heuristic stays the
+  running (F1 0.95 vs 0.86 on the benchmark); the stdlib heuristic stays the
   zero-dependency default and fallback
 - Evaluation: `looma benchmark [--compare|--retrieval]` (P/R/F1, retrieval recall)
 - Human corrections: `looma correct merge|split|rename|promote|reject|false-positive|undo`
@@ -169,7 +169,7 @@ Built on **v1.6.0** - the daily loop: `looma today` (bare `looma`) and
 
 Extraction is heuristic by default and will let the occasional noisy item through;
 confidence + promotion down-rank it, and the auto-detected local LLM extractor is the
-precision upgrade. The full design is in [ARCHITECTURE.md](ARCHITECTURE.md).
+precision upgrade. The full design is in [ARCHITECTURE.md](https://github.com/devYRPauli/looma/blob/main/ARCHITECTURE.md).
 
 ## Why not just search transcripts
 
@@ -197,8 +197,8 @@ docs/         launch assets (screenshots, demo)
 ## Contributing
 
 Feedback, bug reports, and small PRs welcome. See
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](https://github.com/devYRPauli/looma/blob/main/CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE). (c) 2026 devYRPauli.
+[MIT](https://github.com/devYRPauli/looma/blob/main/LICENSE). (c) 2026 devYRPauli.
