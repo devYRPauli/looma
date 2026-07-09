@@ -17,7 +17,6 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Topic :: Software Development :: Documentation",
-    "Private :: Do Not Upload",
 ]
 
 [project.urls]
