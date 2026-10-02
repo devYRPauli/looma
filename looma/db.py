@@ -168,6 +168,8 @@ SCHEMA = [
     )""",
     "CREATE INDEX IF NOT EXISTS idx_edges_src ON edges(src_node, rel)",
     "CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst_node, rel)",
+    "CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages(session_id, seq)",
+    "CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)",
     # --- correction subsystem (schema only for Phase 1) ---
     """CREATE TABLE IF NOT EXISTS correction_ledger (
         id INTEGER PRIMARY KEY,
