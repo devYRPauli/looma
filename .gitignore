@@ -4,6 +4,12 @@
 *.db-shm
 .looma/
 
+# Internal development reports - local only
+/reports/
+*_REPORT.md
+*_READINESS.md
+*_EVALUATION.md
+
 # Python
 __pycache__/
 *.py[cod]
