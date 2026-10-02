@@ -58,9 +58,12 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
     per_source: dict[str, int] = {}
     changed_projects: set[int] = set()
     for adapter in adapters:
-      for handle in adapter.discover():
+      handles = list(adapter.discover()) if verbose else adapter.discover()
+      for index, handle in enumerate(handles, 1):
         if limit is not None and sessions_seen >= limit:
             break
+        if verbose:
+            print(f"[ingest] Reading {handle.source} session {index}/{len(handles)}", flush=True)
         try:
             events = list(adapter.read(handle))
         except Exception:
@@ -184,7 +187,7 @@ def _wipe_project(store: Store, pid: int) -> None:
         c.execute(f"DELETE FROM {t} WHERE project_id=?", (pid,))
 
 
-def rebuild(store: Store, project_ids=None) -> dict:
+def rebuild(store: Store, project_ids=None, verbose=False) -> dict:
     """Regenerate derived data from stored messages. Idempotent.
 
     project_ids=None rebuilds everything (full wipe). A subset rebuilds only those
@@ -204,8 +207,10 @@ def rebuild(store: Store, project_ids=None) -> dict:
 
     extractor = extractor_mod.get_extractor()  # chosen once per rebuild (auto-detects)
     totals = {"work_items": 0, "candidates": 0, "promoted": 0}
-    for project in projects:
-        totals_p = _rebuild_project(store, project, extractor)
+    for index, project in enumerate(projects, 1):
+        if verbose:
+            print(f"[rebuild] Project {index}/{len(projects)}", flush=True)
+        totals_p = _rebuild_project(store, project, extractor, verbose=verbose)
         for k in totals:
             totals[k] += totals_p[k]
     totals["extractor"] = extractor.name
@@ -247,7 +252,7 @@ def _make_sha_validator(store: Store, root):
     return validate
 
 
-def _rebuild_project(store: Store, project: dict, extractor=None) -> dict:
+def _rebuild_project(store: Store, project: dict, extractor=None, verbose=False) -> dict:
     pid = project["id"]
     root = project["root_path"]
     sessions = store.project_sessions(pid)
@@ -351,9 +356,11 @@ def _rebuild_project(store: Store, project: dict, extractor=None) -> dict:
     _extractor = extractor or extractor_mod.get_extractor()
     _use_extractor = _extractor.name != "heuristic"
     merged: dict[tuple, dict] = {}
-    for s in sessions:
+    for index, s in enumerate(sessions, 1):
         wi_id = session_to_wi.get(s["id"])
         model = s.get("agent_model")
+        if verbose:
+            print(f"[rebuild] Extracting {s['source']} session {index}/{len(sessions)}", flush=True)
         if _use_extractor:
             cands = [{"kind": mm["kind"], "title": mm["title"], "body": mm["title"],
                       "ts": None, "message_id": None}
