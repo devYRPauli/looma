@@ -110,7 +110,7 @@ def cmd_ingest(args) -> int:
     t1 = time.perf_counter()
     if not project_filter:
         pipeline.reconcile_projects(store)
-    built = pipeline.rebuild(store)
+    built = pipeline.rebuild(store, verbose=args.verbose)
     t2 = time.perf_counter()
     counts = store.counts()
     store.close()
@@ -142,7 +142,7 @@ def cmd_reprocess(args) -> int:
     store = _open_store(args)
     store.migrate()
     t0 = time.perf_counter()
-    built = pipeline.rebuild(store)
+    built = pipeline.rebuild(store, verbose=args.verbose)
     dt = time.perf_counter() - t0
     store.close()
     print(f"Rebuilt graph from raw events + ledger: {built['work_items']} work items, "
