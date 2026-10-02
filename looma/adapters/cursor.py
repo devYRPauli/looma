@@ -96,6 +96,12 @@ class CursorAdapter:
         return self._conn
 
     def discover(self) -> Iterator[SessionHandle]:
+        # Each discovery cycle needs a fresh snapshot of the live database.
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+            Path(self._copy).unlink()
+            self._copy = None
         if not self.global_db.exists():
             return
         try:
@@ -106,6 +112,22 @@ class CursorAdapter:
             return
         for r in rows:
             yield SessionHandle(SOURCE, r["key"].split(":", 1)[1], str(self.global_db))
+
+    def fingerprint(self, handle: SessionHandle):
+        con = self._connect()
+        row = con.execute("SELECT value FROM cursorDiskKV WHERE key=?",
+                          (f"composerData:{handle.native_id}",)).fetchone()
+        if not row:
+            return None
+        digest = hashlib.sha256()
+        digest.update(str(row["value"]).encode())
+        prefix = f"bubbleId:{handle.native_id}:"
+        for bubble in con.execute(
+            "SELECT key,value FROM cursorDiskKV WHERE key>=? AND key<? ORDER BY key",
+            (prefix, prefix + "\uffff"),
+        ):
+            digest.update(json.dumps([bubble["key"], str(bubble["value"])]).encode())
+        return "cursor-v1:" + digest.hexdigest()
 
     def read(self, handle: SessionHandle) -> Iterator[NormalizedEvent]:
         try:

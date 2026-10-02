@@ -43,6 +43,21 @@ def default_adapters():
     return adapters
 
 
+def _ingest_fingerprint(adapter, handle):
+    fingerprint = getattr(adapter, "fingerprint", None)
+    if fingerprint is not None:
+        return fingerprint(handle)
+    try:
+        path = Path(handle.path)
+        stat = path.stat()
+        if not path.is_file():
+            return None
+        return json.dumps(["file-v1", str(path.resolve()), stat.st_ino,
+                           stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns])
+    except OSError:
+        return None
+
+
 def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=None,
                     verbose=False, adapters=None) -> dict:
     """Discover sessions from all adapters, insert messages idempotently. Returns counts.
@@ -55,6 +70,7 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
     new_msgs = 0
     sessions_seen = 0
     skipped = 0
+    unchanged = 0
     per_source: dict[str, int] = {}
     changed_projects: set[int] = set()
     for adapter in adapters:
@@ -62,6 +78,18 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
       for index, handle in enumerate(handles, 1):
         if limit is not None and sessions_seen >= limit:
             break
+        fingerprint = _ingest_fingerprint(adapter, handle)
+        cached = store.find_session(handle.source, handle.native_id)
+        if fingerprint is not None and cached and cached["ingest_cursor"] == fingerprint:
+            if project_filter and cached["canonical_key"] != project_filter:
+                skipped += 1
+                continue
+            sessions_seen += 1
+            unchanged += 1
+            per_source[handle.source] = per_source.get(handle.source, 0) + 1
+            if verbose:
+                print(f"[ingest] Unchanged {handle.source} session {index}/{len(handles)}", flush=True)
+            continue
         if verbose:
             print(f"[ingest] Reading {handle.source} session {index}/{len(handles)}", flush=True)
         try:
@@ -120,9 +148,13 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
             if store.insert_message(sid, ev) is not None:
                 new_msgs += 1
                 changed_projects.add(pid)
+        # Never mark a moving transcript complete: retry it on the next cycle.
+        if fingerprint is not None and _ingest_fingerprint(adapter, handle) == fingerprint:
+            store.update_ingest_cursor(sid, fingerprint)
     store.commit()
     return {"sessions": sessions_seen, "new_messages": new_msgs, "skipped": skipped,
-            "per_source": per_source, "changed_projects": sorted(changed_projects)}
+            "per_source": per_source, "changed_projects": sorted(changed_projects),
+            "unchanged_sessions": unchanged}
 
 
 def _repo_basename(s: str) -> str:
