@@ -213,6 +213,13 @@ SCHEMA = [
     """CREATE VIRTUAL TABLE IF NOT EXISTS fts_entities
         USING fts5(title, body, content='entities', content_rowid='id')""",
     "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)",
+    """CREATE TABLE IF NOT EXISTS extraction_cache (
+        cache_key TEXT PRIMARY KEY, payload TEXT
+    )""",
+    """CREATE TABLE IF NOT EXISTS pending_rebuild_projects (
+        project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+        generation INTEGER NOT NULL DEFAULT 0
+    )""",
     # persistent git-SHA validation cache (NOT a derived table - survives rebuild)
     """CREATE TABLE IF NOT EXISTS git_sha_cache (
         root TEXT, sha TEXT, present INTEGER, PRIMARY KEY(root, sha)

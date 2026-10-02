@@ -46,9 +46,9 @@ def cycle(store: Store, adapters=None) -> dict:
     repos with new messages are re-derived, so steady-state cost scales with what
     you touched, not your whole history."""
     ing = pipeline.ingest_messages(store, adapters=adapters)
-    changed = ing.get("changed_projects") or []
+    changed = store.pending_rebuild_projects()
     if changed:
-        pipeline.rebuild(store, project_ids=changed)
+        pipeline.rebuild(store, project_ids=changed, extraction_budget=8)
     return ing
 
 
@@ -62,12 +62,21 @@ def run(db_path, interval: int = 60, once: bool = False, verbose: bool = False,
         while True:
             m = transcript_mtime()
             if m != last_mtime:
-                ing = cycle(store, adapters)
-                last_mtime = m
-                if ing["new_messages"] or verbose:
-                    src = ", ".join(f"{k}:{v}" for k, v in sorted((ing.get("per_source") or {}).items()))
-                    log(f"[looma] +{ing['new_messages']} messages from {ing['sessions']} sessions "
-                        f"({src or 'none'}); graph updated")
+                try:
+                    ing = cycle(store, adapters)
+                except Exception as exc:
+                    store.conn.rollback()
+                    pending = len(store.pending_rebuild_projects())
+                    log(f"[looma] Cycle failed ({type(exc).__name__}): {exc}; "
+                        f"pending_projects={pending}; retrying after {interval}s.")
+                    if once:
+                        raise
+                else:
+                    last_mtime = m
+                    if ing["new_messages"] or verbose:
+                        src = ", ".join(f"{k}:{v}" for k, v in sorted((ing.get("per_source") or {}).items()))
+                        log(f"[looma] +{ing['new_messages']} messages from {ing['sessions']} sessions "
+                            f"({src or 'none'}); graph updated")
             if once:
                 break
             time.sleep(interval)

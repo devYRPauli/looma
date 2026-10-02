@@ -11,6 +11,7 @@ llama-server or Ollama) - no hosted API - and falls back to heuristic on any err
 """
 
 import functools
+import hashlib
 import json
 import os
 import urllib.request
@@ -97,7 +98,7 @@ def _transcript(messages: list[dict], max_chars: int = 6000) -> str:
 
 def _extract_json(text: str):
     """Return the first complete JSON value (object OR array), or None."""
-    if not text:
+    if not isinstance(text, str) or not text:
         return None
     candidates = [i for i in (text.find("{"), text.find("[")) if i >= 0]
     if not candidates:
@@ -130,8 +131,11 @@ def _clean_memories(mems_raw) -> list[dict]:
     for m in (mems_raw or [])[:8]:
         if not isinstance(m, dict):
             continue
-        kind = (m.get("kind") or "").strip().lower()
-        title = to_ascii((m.get("title") or "").strip())
+        kind, title = m.get("kind"), m.get("title")
+        if not isinstance(kind, str) or not isinstance(title, str):
+            continue
+        kind = kind.strip().lower()
+        title = to_ascii(title.strip())
         if kind not in MEMORY_KINDS or not (8 <= len(title) <= 200):
             continue
         if _cand.rejects_memory(kind, title):
@@ -150,6 +154,18 @@ class LocalLLMExtractor:
     def __init__(self, fallback=None, timeout: float = 120.0):
         self.fallback = fallback or HeuristicExtractor()
         self.timeout = timeout
+        self.last_failed = False
+
+    def cache_namespace(self) -> str:
+        return hashlib.sha256(json.dumps([_PROMPT, _local_url(), _model()]).encode()).hexdigest()
+
+    def cache_key(self, messages: list[dict]) -> str:
+        content = [(m.get("role"), m.get("text")) for m in messages]
+        return hashlib.sha256(json.dumps([self.cache_namespace(), content]).encode()).hexdigest()
+
+    def _fallback(self, messages):
+        self.last_failed = True
+        return self.fallback.extract(messages)
 
     def _call(self, prompt: str) -> Optional[str]:
         body = json.dumps({
@@ -169,25 +185,29 @@ class LocalLLMExtractor:
             return None
 
     def extract(self, messages: list[dict]) -> dict:
+        self.last_failed = False
         transcript = _transcript(messages)
         if not transcript.strip():
             return {"memories": [], "work": {"label": None, "kind": "feature"}}
         raw = self._call(_PROMPT.replace("{transcript}", transcript))
         parsed = _extract_json(raw) if raw else None
         if parsed is None:
-            return self.fallback.extract(messages)  # robust local fallback
+            return self._fallback(messages)
         # accept either a bare array of memories or the wrapped {memories, work} object
         if isinstance(parsed, list):
             mems_raw, work = parsed, {}
         elif isinstance(parsed, dict):
             mems_raw, work = (parsed.get("memories") or []), (parsed.get("work") or {})
         else:
-            return self.fallback.extract(messages)
+            return self._fallback(messages)
+        if not isinstance(mems_raw, list) or not isinstance(work, dict):
+            return self._fallback(messages)
         mems = _clean_memories(mems_raw)
         label = (str(work.get("label") or "")).strip() or None
         if label and label.lower() in ("null", "none"):
             label = None
-        kind = (work.get("kind") or "").strip().lower()
+        kind = work.get("kind") or ""
+        kind = kind.strip().lower() if isinstance(kind, str) else ""
         if kind not in ("feature", "bugfix", "refactor", "migration", "investigation"):
             kind = ""
         # fall back to the heuristic work signal when the LLM omits or botches it

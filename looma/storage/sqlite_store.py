@@ -104,6 +104,38 @@ class Store:
     def update_ingest_cursor(self, session_id: int, cursor: str) -> None:
         self.conn.execute("UPDATE sessions SET ingest_cursor=? WHERE id=?", (cursor, session_id))
 
+    def pending_rebuild_projects(self) -> list[int]:
+        return [r[0] for r in self.conn.execute(
+            "SELECT project_id FROM pending_rebuild_projects ORDER BY project_id")]
+
+    def mark_rebuild_pending(self, project_id: int) -> None:
+        self.conn.execute("INSERT INTO pending_rebuild_projects(project_id) VALUES(?) "
+                          "ON CONFLICT(project_id) DO UPDATE SET generation=generation+1", (project_id,))
+
+    def rebuild_generation(self, project_id: int):
+        row = self.conn.execute("SELECT generation FROM pending_rebuild_projects WHERE project_id=?",
+                                (project_id,)).fetchone()
+        return row[0] if row else None
+
+    def clear_rebuild_pending(self, project_id: int, generation) -> None:
+        self.conn.execute("DELETE FROM pending_rebuild_projects WHERE project_id=? AND generation=?",
+                          (project_id, generation))
+
+    def cached_extraction(self, key: str) -> Optional[dict]:
+        row = self.conn.execute("SELECT payload FROM extraction_cache WHERE cache_key=?", (key,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def cache_extraction(self, key: str, payload: dict) -> None:
+        self.conn.execute("INSERT OR REPLACE INTO extraction_cache VALUES(?,?)", (key, json.dumps(payload)))
+
+    def extraction_retry_after(self, key: str) -> float:
+        row = self.conn.execute("SELECT value FROM meta WHERE key=?", ("extraction-retry:" + key,)).fetchone()
+        return float(row[0]) if row else 0.0
+
+    def defer_extraction(self, key: str, retry_after: float) -> None:
+        self.conn.execute("INSERT OR REPLACE INTO meta VALUES(?,?)",
+                          ("extraction-retry:" + key, str(retry_after)))
+
     def upsert_session(
         self,
         project_id: int,
