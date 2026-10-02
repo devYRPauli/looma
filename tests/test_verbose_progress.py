@@ -43,7 +43,7 @@ class VerboseProgressTest(unittest.TestCase):
             pipeline.rebuild(store)
         self.assertEqual(output.getvalue(), "")
         with contextlib.redirect_stdout(output), patch.object(pipeline, "_rebuild_project") as rebuild:
-            def run(store, project, extractor, verbose=False):
+            def run(store, project, extractor, verbose=False, extracted=None):
                 self.assertIn("[rebuild] Project 1/1", output.getvalue())
                 self.assertTrue(verbose)
                 return {"work_items": 0, "candidates": 0, "promoted": 0}

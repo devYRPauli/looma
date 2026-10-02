@@ -9,6 +9,8 @@ Two phases keep the system idempotent (ARCHITECTURE.md 14):
 
 import json
 import os
+import sys
+import time
 from pathlib import Path
 
 from . import confidence, correction, gitutil, identity
@@ -21,13 +23,6 @@ from .extraction import extractor as extractor_mod
 from .promotion import promote
 from .resolution import workitems as wi_mod
 from .storage.sqlite_store import Store
-
-# child -> parent order so FK constraints hold during a full-rebuild wipe
-_DERIVED_TABLES = [
-    "edges", "nodes", "entity_evidence", "entities", "candidate_memories",
-    "commit_files", "commits", "files", "branches", "work_items",
-]
-
 
 def default_adapters():
     """All available source adapters (Claude + Codex + Cursor when present)."""
@@ -94,8 +89,8 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
             print(f"[ingest] Reading {handle.source} session {index}/{len(handles)}", flush=True)
         try:
             events = list(adapter.read(handle))
-        except Exception:
-            continue
+        except Exception as exc:
+            raise RuntimeError(f"Could not read {handle.source} session {handle.native_id}") from exc
         if not events:
             continue
         # project identity from the session's first event that carries a cwd
@@ -144,13 +139,18 @@ def ingest_messages(store: Store, projects_dir=None, limit=None, project_filter=
             max(ts_list) if ts_list else None,
             model,
         )
+        session_new = 0
         for ev in events:
             if store.insert_message(sid, ev) is not None:
                 new_msgs += 1
+                session_new += 1
                 changed_projects.add(pid)
+        if session_new:
+            store.mark_rebuild_pending(pid)
         # Never mark a moving transcript complete: retry it on the next cycle.
         if fingerprint is not None and _ingest_fingerprint(adapter, handle) == fingerprint:
             store.update_ingest_cursor(sid, fingerprint)
+        store.commit()
     store.commit()
     return {"sessions": sessions_seen, "new_messages": new_msgs, "skipped": skipped,
             "per_source": per_source, "changed_projects": sorted(changed_projects),
@@ -196,13 +196,6 @@ def reconcile_projects(store: Store) -> int:
     return merged
 
 
-def _wipe_all(store: Store) -> None:
-    for t in _DERIVED_TABLES:
-        store.conn.execute(f"DELETE FROM {t}")
-    store.conn.execute("DELETE FROM fts_workitems")
-    store.conn.execute("DELETE FROM fts_entities")
-
-
 def _wipe_project(store: Store, pid: int) -> None:
     """Delete one project's derived rows in FK-safe order (for incremental rebuild)."""
     c = store.conn
@@ -219,36 +212,78 @@ def _wipe_project(store: Store, pid: int) -> None:
         c.execute(f"DELETE FROM {t} WHERE project_id=?", (pid,))
 
 
-def rebuild(store: Store, project_ids=None, verbose=False) -> dict:
+def _extract_sessions(store, projects, extractor, budget, verbose):
+    results = {}
+    if extractor.name == "heuristic":
+        return results
+    namespace = extractor.cache_namespace()
+    retry_after = store.extraction_retry_after(namespace)
+    attempts = 0
+    warned_budget = False
+    for project in projects:
+        sessions = store.project_sessions(project["id"])
+        for index, session in enumerate(sessions, 1):
+            messages = store.session_messages(session["id"])
+            if is_automated_session(messages):
+                continue
+            if verbose:
+                print(f"[rebuild] Extracting {session['source']} session {index}/{len(sessions)}", flush=True)
+            key = extractor.cache_key(messages)
+            result = store.cached_extraction(key)
+            if result is None:
+                if time.time() < retry_after or (budget is not None and attempts >= budget):
+                    if time.time() >= retry_after and not warned_budget:
+                        print(f"[looma] Extraction budget exhausted ({attempts} attempts); using heuristic extraction.", file=sys.stderr)
+                        warned_budget = True
+                    result = extractor.fallback.extract(messages)
+                else:
+                    attempts += 1
+                    result = extractor.extract(messages)
+                    if extractor.last_failed:
+                        retry_after = time.time() + 300
+                        store.defer_extraction(namespace, retry_after)
+                        print("[looma] Local LLM extraction failed; using heuristic extraction for 300s.", file=sys.stderr)
+                    else:
+                        store.cache_extraction(key, result)
+                    store.commit()
+            results[session["id"]] = result
+    return results
+
+
+def rebuild(store: Store, project_ids=None, verbose=False, extraction_budget=None) -> dict:
     """Regenerate derived data from stored messages. Idempotent.
 
     project_ids=None rebuilds everything (full wipe). A subset rebuilds only those
     projects (incremental) - the daemon uses this so an edit to one repo does not
     re-derive all of them."""
     if project_ids is None:
-        _wipe_all(store)
         projects = store.list_projects()
         incremental = False
     else:
         ids = set(project_ids)
-        for pid in ids:
-            _wipe_project(store, pid)
         projects = [p for p in store.list_projects() if p["id"] in ids]
         incremental = True
     store.commit()
 
     extractor = extractor_mod.get_extractor()  # chosen once per rebuild (auto-detects)
+    generations = {p["id"]: store.rebuild_generation(p["id"]) for p in projects}
+    extracted = _extract_sessions(store, projects, extractor, extraction_budget, verbose)
     totals = {"work_items": 0, "candidates": 0, "promoted": 0}
     for index, project in enumerate(projects, 1):
         if verbose:
             print(f"[rebuild] Project {index}/{len(projects)}", flush=True)
-        totals_p = _rebuild_project(store, project, extractor, verbose=verbose)
+        with store.conn:
+            _wipe_project(store, project["id"])
+            totals_p = _rebuild_project(store, project, extractor, verbose=verbose, extracted=extracted)
         for k in totals:
             totals[k] += totals_p[k]
     totals["extractor"] = extractor.name
     totals["incremental"] = incremental
     store.commit()
     _populate_vectors(store)
+    with store.conn:
+        for project in projects:
+            store.clear_rebuild_pending(project["id"], generations[project["id"]])
     return totals
 
 
@@ -284,7 +319,7 @@ def _make_sha_validator(store: Store, root):
     return validate
 
 
-def _rebuild_project(store: Store, project: dict, extractor=None, verbose=False) -> dict:
+def _rebuild_project(store: Store, project: dict, extractor=None, verbose=False, extracted=None) -> dict:
     pid = project["id"]
     root = project["root_path"]
     sessions = store.project_sessions(pid)
@@ -396,7 +431,7 @@ def _rebuild_project(store: Store, project: dict, extractor=None, verbose=False)
         if _use_extractor:
             cands = [{"kind": mm["kind"], "title": mm["title"], "body": mm["title"],
                       "ts": None, "message_id": None}
-                     for mm in _extractor.extract(session_msgs[s["id"]]).get("memories", [])]
+                     for mm in extracted[s["id"]].get("memories", [])]
         else:
             cands = cand_mod.extract_candidates(session_msgs[s["id"]])
         for c in cands:
@@ -479,7 +514,6 @@ def _rebuild_project(store: Store, project: dict, extractor=None, verbose=False)
                 )
             n_promoted += 1
 
-    store.commit()
     return {"work_items": len(wi_ids), "candidates": n_candidates, "promoted": n_promoted}
 
 

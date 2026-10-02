@@ -72,6 +72,7 @@ class ExtractorBehaviourTest(unittest.TestCase):
         self.assertEqual(ex._extract_json('noise {"a":1} tail')["a"], 1)
         self.assertEqual(ex._extract_json('x [{"k":2}] y')[0]["k"], 2)
         self.assertIsNone(ex._extract_json("no json here"))
+        self.assertIsNone(ex._extract_json({"unexpected": "content object"}))
 
     def test_llm_falls_back_to_heuristic_when_unreachable(self):
         prev = os.environ.get("LOOMA_LLM_URL")
