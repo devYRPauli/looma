@@ -93,6 +93,17 @@ class Store:
 
     # ----- sessions / messages -----
 
+    def find_session(self, source: str, native_id: str) -> Optional[dict]:
+        row = self.conn.execute(
+            "SELECT sessions.*, projects.canonical_key FROM sessions "
+            "JOIN projects ON projects.id=sessions.project_id "
+            "WHERE source=? AND native_id=?", (source, native_id)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def update_ingest_cursor(self, session_id: int, cursor: str) -> None:
+        self.conn.execute("UPDATE sessions SET ingest_cursor=? WHERE id=?", (cursor, session_id))
+
     def upsert_session(
         self,
         project_id: int,
