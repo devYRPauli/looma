@@ -39,6 +39,18 @@ python3 -m unittest discover -s tests -t .   # 44 tests, must stay green
 No build step; it is pure Python. `looma reprocess` rebuilds the graph from stored
 events if you change extraction/resolution/promotion logic.
 
+## Development reports
+
+Keep benchmark results, development reports, and release-readiness notes in the
+local-only `reports/` directory or a temporary directory. These files can contain
+project names, paths, and transcript-derived data; do not commit them.
+
+The repository ignores `reports/`, `*_REPORT.md`, `*_READINESS.md`, and
+`*_EVALUATION.md`. Keep the root's public documentation limited to README,
+CHANGELOG, CONTRIBUTING, ARCHITECTURE, and LICENSE. Before a release, check the
+tracked files for internal reports; ignore rules do not protect files already
+tracked or added with `git add -f`.
+
 ## Project layout
 
 ```
